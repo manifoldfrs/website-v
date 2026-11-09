@@ -44,6 +44,7 @@ export function Turntable() {
 
       <nav id="toggles" aria-label="Record player">
         <button id="t-records" type="button" aria-pressed="false" title="Records">
+          <span id="now-cover" aria-hidden="true" hidden />
           <span className="eq" aria-hidden="true"><i /><i /><i /><i /></span>
           <span id="now-title">Records</span>
           <span id="now-time" />

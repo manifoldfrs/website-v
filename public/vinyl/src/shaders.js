@@ -12,8 +12,10 @@ const COMMON = `#version 300 es
 precision highp float;
 precision highp sampler2DShadow;
 uniform sampler2DShadow uShadow; uniform mat4 uLVP; uniform vec3 uEye; uniform vec4 uLamp;   // lamp: xyz, on
+uniform float uPulse;                                                                         // music level, 0..1
 const vec3 L1 = ${v3(KEY)}, L2 = ${v3(FILL)}, L3 = ${v3(RIM)}, LS = ${v3(STRIP)};
-const vec3 KEYC = vec3(2.5, 2.38, 2.2), RIMC = vec3(0.55, 0.62, 0.75), FILLC = vec3(0.05, 0.05, 0.06);
+const vec3 KEYC = vec3(2.6, 2.22, 1.72), RIMC = vec3(0.48, 0.53, 0.64), FILLC = vec3(0.05, 0.045, 0.044);   // tungsten key
+vec3 keyc() { return KEYC * (1.0 + 0.22 * uPulse); }
 float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float softbox(vec3 r, vec3 d, vec3 u, vec2 half_, float s) {
   float t = dot(r, d); if (t <= 0.02) return 0.0;
@@ -23,8 +25,8 @@ float softbox(vec3 r, vec3 d, vec3 u, vec2 half_, float s) {
 }
 vec3 env(vec3 r, float rough) {                      // what a reflection sees: a dark room with softboxes
   float s = 0.02 + 0.9 * rough, k = 1.0 / (1.0 + 7.0 * rough * rough);
-  vec3 c = vec3(0.010, 0.010, 0.013) + 0.022 * smoothstep(-0.3, 0.7, r.z);
-  c += 7.0 * k * softbox(r, L1, vec3(1.0, 0.0, 0.0), vec2(0.55, 0.30), s) * vec3(1.0, 0.95, 0.88);
+  vec3 c = vec3(0.007, 0.0065, 0.007) + 0.016 * smoothstep(-0.3, 0.7, r.z);
+  c += 7.0 * k * softbox(r, L1, vec3(1.0, 0.0, 0.0), vec2(0.55, 0.30), s) * vec3(1.0, 0.90, 0.76);
   c += 3.0 * k * softbox(r, LS, vec3(0.0, 1.0, 0.0), vec2(0.60, 0.07), s) * vec3(0.80, 0.88, 1.0);
   c += 4.0 * k * softbox(r, L3, vec3(0.0, 0.0, 1.0), vec2(0.34, 0.10), s) * vec3(0.85, 0.92, 1.0);
   return c;
@@ -36,7 +38,7 @@ float shadow(vec3 P, vec3 N) {
   for (int i = -1; i <= 1; i++) for (int j = -1; j <= 1; j++) a += texture(uShadow, vec3(s.xy + vec2(float(i), float(j)) * t, s.z - 0.0009));
   return a / 9.0;
 }
-float pool(vec3 P) { return mix(0.05, 1.0, smoothstep(0.95, 0.20, length(P.xy - vec2(0.04, 0.0)))); }   // the key is a spot
+float pool(vec3 P) { return mix(0.03, 1.0, smoothstep(0.85, 0.18, length(P.xy - vec2(0.04, 0.0)))); }   // the key is a spot
 vec3 brdf(vec3 N, vec3 V, vec3 L, vec3 F0, vec3 diff, float rough) {
   float nl = max(dot(N, L), 0.0); if (nl <= 0.0) return vec3(0.0);
   vec3 H = normalize(L + V); float nh = max(dot(N, H), 0.0), nv = max(dot(N, V), 1e-3), a = rough * rough, a2 = a * a;
@@ -47,7 +49,7 @@ vec3 brdf(vec3 N, vec3 V, vec3 L, vec3 F0, vec3 diff, float rough) {
 vec3 shade(vec3 P, vec3 N, vec3 alb, float rough, float metal, float ao) {
   vec3 V = normalize(uEye - P), F0 = mix(vec3(0.04), alb, metal), diff = alb * (1.0 - metal);
   float sh = shadow(P, N), nv = max(dot(N, V), 1e-3);
-  vec3 c = brdf(N, V, L1, F0, diff, rough) * KEYC * sh * pool(P) + brdf(N, V, L3, F0, diff, rough) * RIMC * ao + brdf(N, V, L2, F0, diff, rough) * FILLC;
+  vec3 c = brdf(N, V, L1, F0, diff, rough) * keyc() * sh * pool(P) + brdf(N, V, L3, F0, diff, rough) * RIMC * ao + brdf(N, V, L2, F0, diff, rough) * FILLC;
   vec3 lp = uLamp.xyz - P; float ld = length(lp);
   c += brdf(N, V, lp / ld, F0, diff, max(rough, 0.3)) * vec3(1.0, 0.10, 0.04) * uLamp.w * 1.6 / (1.0 + ld * ld / 0.0012);
   vec3 F = F0 + (max(vec3(1.0 - rough), F0) - F0) * pow(1.0 - nv, 5.0);
@@ -68,12 +70,16 @@ export const DEPTH_FS = `#version 300 es
 precision mediump float;
 void main() {}`;
 
-// uMode: 0 plain, 1 turned metal, 2 deck plate, 3 platter with strobe dots, 5 table top
+// uMode: 0 plain, 1 turned metal, 2 deck plate, 3 platter with strobe dots, 5 table top, 6 VU meter face
 export const STD_FS = COMMON + `
 in vec3 vP, vN, vO; out vec4 o;
 uniform mat4 uM; uniform vec3 uCol, uEmis; uniform float uRough, uMetal; uniform int uMode; uniform vec2 uPivot;
+uniform vec4 uVu;   // VU meter window: x0 y0 x1 y1
+float plateAo(vec3 P) {
+  return mix(0.35, 1.0, smoothstep(0.163, 0.205, length(P.xy))) * mix(0.45, 1.0, smoothstep(0.028, 0.060, length(P.xy - uPivot)));
+}
 void main() {
-  vec3 N = normalize(vN), alb = uCol; float rough = uRough, metal = uMetal, ao = 1.0;
+  vec3 N = normalize(vN), alb = uCol, em = uEmis; float rough = uRough, metal = uMetal, ao = 1.0;
   float ro = length(vO.xy), px = fwidth(vO.x) + fwidth(vO.y) + fwidth(vO.z);
   if (uMode == 1 || uMode == 3) {                       // lathe-turned: fine concentric brushing
     float b = hash(vec2(floor(ro * 5000.0), 3.0)) - 0.5, fade = 1.0 - smoothstep(1e-4, 6e-4, px);
@@ -87,14 +93,26 @@ void main() {
   }
   if (uMode == 2 && N.z > 0.5) {                        // deck plate: paint texture + contact occlusion
     alb *= 0.88 + 0.24 * hash(floor(vP.xy * 2500.0)) * (1.0 - smoothstep(2e-4, 1e-3, px));
-    ao *= mix(0.35, 1.0, smoothstep(0.163, 0.205, length(vP.xy))) * mix(0.45, 1.0, smoothstep(0.028, 0.060, length(vP.xy - uPivot)));
+    ao *= plateAo(vP);
+  }
+  if (uMode == 6) {                                     // VU meter face: backlit cream card, scale arc, red zone
+    vec2 q = vP.xy - vec2(0.5 * (uVu.x + uVu.z), uVu.y + 0.004);
+    float r = length(q), a = atan(q.x, q.y), aa = fwidth(r) + 1e-5, inScale = step(abs(a), 0.87);
+    float tick = inScale * step(0.0186, r) * step(r, 0.0222) * smoothstep(0.00028 + aa, 0.00028, abs(fract(a / 0.1309 + 0.5) - 0.5) * 0.1309 * r);
+    float arc = inScale * smoothstep(0.00022 + aa, 0.00022, abs(r - 0.0186));
+    float red = step(0.35, a) * inScale * step(0.0186, r) * step(r, 0.0204);
+    float ink = max(max(tick, arc), red);
+    alb = mix(vec3(0.62, 0.50, 0.32), mix(vec3(0.012), vec3(0.30, 0.015, 0.008), red), ink);
+    em = uEmis * (1.0 - ink) + uEmis * red * vec3(0.6, 0.05, 0.02);
+    rough = 0.55;
   }
   if (uMode == 5) {                                     // table: occlusion under the plinth
     vec2 q = abs(vP.xy - vec2(0.0425, 0.0)) - vec2(0.2275, 0.19);
     ao *= mix(0.15, 1.0, smoothstep(-0.01, 0.07, length(max(q, 0.0)) + min(max(q.x, q.y), 0.0)));
     alb *= 0.9 + 0.2 * hash(floor(vP.xy * 900.0)) * (1.0 - smoothstep(5e-4, 3e-3, px));
+    em += vec3(0.9, 0.42, 0.10) * 0.010 * uPulse * pool(vP);   // a warm glow on the table that breathes with the music
   }
-  o = vec4(tone(shade(vP, N, alb, clamp(rough, 0.06, 1.0), metal, ao) + uEmis), 1.0);
+  o = vec4(tone(shade(vP, N, alb, clamp(rough, 0.06, 1.0), metal, ao) + em), 1.0);
 }`;
 
 export const REC_VS = `#version 300 es
@@ -144,12 +162,12 @@ void main() {
     float sig = 0.014 + 0.085 * vis; vec3 groove = vec3(0.0016) + vis * 0.003;
     for (int i = 0; i < 3; i++) {
       vec3 L = i == 0 ? L1 : (i == 1 ? L3 : LS), H = normalize(L + V);
-      vec3 lc = i == 0 ? KEYC * key : (i == 1 ? RIMC * 1.6 : vec3(0.5, 0.56, 0.66));
+      vec3 lc = i == 0 ? keyc() * key : (i == 1 ? RIMC * 1.6 : vec3(0.5, 0.56, 0.66));
       float th = dot(Tw, H), s = exp(-th * th / (2.0 * sig * sig)) * 0.0085 / sig * (0.3 + 0.7 * max(dot(N, H), 0.0));
       groove += s * lc * (vec3(0.72, 0.70, 0.67) + 0.28 * cos(6.2832 * (th * 9.0 + r * 55.0 + vec3(0.0, 0.33, 0.67))));
     }
     float fr = pow(1.0 - max(dot(N, V), 0.0), 5.0);
-    vec3 land = vec3(0.0012) + env(reflect(-V, N), 0.07) * (0.045 + 0.955 * fr) * (0.5 + 0.5 * sh) + brdf(N, V, L1, vec3(0.045), vec3(0.002), 0.12) * KEYC * key;
+    vec3 land = vec3(0.0012) + env(reflect(-V, N), 0.07) * (0.045 + 0.955 * fr) * (0.5 + 0.5 * sh) + brdf(N, V, L1, vec3(0.045), vec3(0.002), 0.12) * keyc() * key;
     c = mix(land, groove, cover);
     for (int i = 0; i < uNScr; i++) {                          // scratches catch the light
       vec4 s = uScr[i];

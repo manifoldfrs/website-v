@@ -7,8 +7,8 @@ import { PIVOT_X, PIVOT_Y, ALPHA_REST, R_DISC, R_LABEL, R_LEADIN, W33, alphaForR
 
 const $ = (id) => document.getElementById(id);
 const ASSETS = new URL('../assets/', import.meta.url).href;
-// The deck stays mounted while the visitor reads other pages; there it is hidden and only the now-playing pill shows.
 
+// The deck stays mounted while the visitor reads other pages; there it is hidden and only the now-playing pill shows.
 const deckShown = () => $('gl').getClientRects().length > 0;
 const canvas = $('gl'), renderer = makeRenderer();
 
@@ -22,8 +22,15 @@ const worker = { postMessage: (m, transfer) => { busy(); (masterWorker ||= start
 const busy = (h = { got: 0, total: 0 }) => (window.__load = h);
 const idle = () => { if (window.__load) window.__load.done = true; };
 const AZ0 = -0.5, EL0 = 0.6;   // default camera
-const S = { tel: null, tRecv: 0, zoom: 0, zoomT: 0, az: AZ0, el: EL0, rpm: 33.3333, rec: null, pending: null, motor: false, cue: true, ready: false };
-let ctx = null, node = null, drag = null;
+
+const S = {
+  tel: null, tRecv: 0, zoom: 0, zoomT: 0, az: AZ0, el: EL0, rpm: 33.3333, rec: null, pending: null, motor: false, cue: true, ready: false,
+  vu: 0, pulse: 0, drift: 0, driftAmt: 0, lastInput: performance.now(), introT0: 0,
+};
+
+const STILL = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+let ctx = null, node = null, drag = null, analyser = null, levelBuf = null;
 // ?og renders just the deck on black, with no interface and no audio: it is how og.png (the share image) is made
 const OG = new URLSearchParams(location.search).has('og');
 if (OG) document.documentElement.classList.add('og');
@@ -47,7 +54,7 @@ function gotRecord(rec, vis) {
   idle();
   if (!S.shown) {            // first record: fade the deck and the disc in together, a frame after it has been drawn
     S.shown = true;
-    requestAnimationFrame(() => requestAnimationFrame(() => document.documentElement.classList.add('ready')));
+    requestAnimationFrame(() => requestAnimationFrame(() => { document.documentElement.classList.add('ready'); S.introT0 = performance.now(); }));
   }
   S.pending = rec; S.pendingPick = pick;          // gotRecord only ever runs for the current pick
   status(rec.truncated ? 'Programme was too long for one side and was cut short.' : '');
@@ -153,6 +160,7 @@ function initAudio() {
       } else if (m.t === 'log') console.warn(m.msg);
     };
     node.connect(ctx.destination);
+    analyser = ctx.createAnalyser(); analyser.fftSize = 2048; node.connect(analyser);
     if (!S.on && ctx.state === 'running') await ctx.suspend();   // some browsers start it unasked; stay silent until power-on
   })().catch((err) => { audioInit = null; ctx = null; node = null; throw err; });
 }
@@ -161,6 +169,10 @@ async function powerOn() {
   if (S.on) return;
   S.on = true; $('power').classList.add('busy');      // a spinner until the engine is warm AND the record is in it
   powerMsg();
+
+  // iOS Safari plays Web Audio as "ambient" by default, which the ring/silent switch mutes; this marks it as music
+  if ('audioSession' in navigator) navigator.audioSession.type = 'playback';
+
   try {
     if (ctx) ctx.resume().catch(() => {});            // straight away, inside the gesture: iOS only honours it there
     await initAudio();
@@ -258,21 +270,27 @@ function markRecord(r) {
   S.shelf = r?.tracks ? r : null;
   S.recTitle = r ? r.title : 'Your audio'; nowPlaying(S.recTitle);
   for (const b of shelf.querySelectorAll('button')) b.setAttribute('aria-current', String(b.dataset.id === r?.id));
-  showCover(r?.cover);
+  showCover(r);
 }
-// The label shows the record's cover art once it has loaded; until then, and without one, the paper label.
 
-function showCover(url) {
-  const me = pick;
-  renderer.setArt(null);
+// The label and the now-playing thumbnail show the record's cover once it has loaded;
+// until then, and without one, the paper label and no thumbnail.
+function showCover(r) {
+  const me = pick, thumb = $('now-cover');
+  renderer.setArt(null); thumb.hidden = true;
 
-  if (!url) return;
+  if (!r?.cover) return;
   const img = new Image();
-  img.onload = () => { if (me === pick) renderer.setArt(img); };
+  img.onload = () => {
+    if (me !== pick) return;
+    renderer.setArt(img);
+    thumb.style.backgroundImage = `url("${r.cover}")`; thumb.hidden = false;
+  };
 
-  img.onerror = () => console.warn('could not load the cover art', url);
-  img.src = url;
+  img.onerror = () => console.warn('could not load the cover art', r.cover);
+  img.src = r.cover;
 }
+
 async function pickRecord(r) {
   const me = ++pick;
   markRecord(r);
@@ -316,6 +334,7 @@ addEventListener('drop', (e) => { if (!deckShown()) return; e.preventDefault(); 
 addEventListener('keydown', (e) => {
   if (!deckShown()) return;
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  noteInput();
   if (e.code === 'Space') { e.preventDefault(); setMotor(!S.motor); }
   else if (e.key === 'c') send({ t: 'cue', up: !S.cue });
   else if (e.key === 'b') send({ t: 'bump', s: 1 });
@@ -326,7 +345,15 @@ addEventListener('keydown', (e) => {
 const armAngle = (p) => { const a = Math.atan2(p[1] - PIVOT_Y, p[0] - PIVOT_X); return a < 0 ? a + TAU : a; };
 const curAl = () => (S.tel ? S.tel.al : ALPHA_REST);
 const touches = new Map();   // active pointers, for two-finger pinch zoom
+
+// Any input stops the idle drift; the view stays where the drift had taken it.
+function noteInput() {
+  S.az += S.drift; S.drift = 0; S.driftAmt = 0; S.lastInput = performance.now();
+}
+
 canvas.addEventListener('pointerdown', (e) => {
+  noteInput();
+
   try { canvas.setPointerCapture(e.pointerId); } catch {}
   touches.set(e.pointerId, [e.clientX, e.clientY]);
   if (touches.size === 2) {                     // a second finger: stop what the first was doing and pinch
@@ -350,6 +377,7 @@ canvas.addEventListener('pointerdown', (e) => {
 });
 canvas.addEventListener('pointermove', (e) => {
   if (touches.has(e.pointerId)) touches.set(e.pointerId, [e.clientX, e.clientY]);
+
   if (!drag) return;
   if (drag.type === 'pinch') {
     const [a, b] = [...touches.values()];
@@ -387,7 +415,8 @@ for (const type of ['touchend', 'click']) canvas.addEventListener(type, () => {
   if (!S.on && S.tapped && performance.now() - S.tapped < 800 && document.documentElement.classList.contains('ready')) { S.tapped = 0; powerOn(); }
 });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-canvas.addEventListener('wheel', (e) => { e.preventDefault(); S.zoomT = Math.max(-0.8, Math.min(0.985, S.zoomT - e.deltaY * (e.ctrlKey ? 0.01 : 0.0015))); }, { passive: false });
+
+canvas.addEventListener('wheel', (e) => { e.preventDefault(); noteInput(); S.zoomT = Math.max(-0.8, Math.min(0.985, S.zoomT - e.deltaY * (e.ctrlKey ? 0.01 : 0.0015))); }, { passive: false });
 
 // ---------- now playing ----------
 const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
@@ -432,7 +461,15 @@ function tick() {
 
   if (deckShown()) guard('render', () => {
     if (OG) renderer.draw({ thp: 2.2, al: alphaForRadius(0.108), zt: 0, zoom: 0, az: -0.5, el: 0.6, motor: true, rpm: 33.3333, bare: true, dist: 1.1, at: [0.021, -0.07, -0.093], ...window.__og });   // deck high in the frame: X overlays the bottom
-    else renderer.draw({ thp: t ? t.thp + t.wp * dt : 0, al: t ? t.al : ALPHA_REST, zt: t ? t.zb + t.ze : 5e-3, zoom: S.zoom, az: S.az, el: S.el, motor: S.motor, rpm: S.rpm });
+    else {
+      const now = performance.now(), cam = cameraMotion(now);
+      animate();
+      renderer.draw({
+        thp: t ? t.thp + t.wp * dt : 0, al: t ? t.al : ALPHA_REST, zt: t ? t.zb + t.ze : 5e-3, motor: S.motor, rpm: S.rpm,
+        zoom: S.zoom + cam.zoom, az: S.az + cam.az, el: Math.min(1.55, S.el + cam.el),
+        vu: S.vu, pulse: STILL ? 0 : S.pulse, power: !!S.started,
+      });
+    }
   });
 
   if (deckShown() && !OG) guard('links', printLinks);
@@ -440,6 +477,38 @@ function tick() {
   if (frame % 6 === 0) guard('readout', drawStats);
   guard('loader', drawLoader);
 }
+
+// The camera's own motion on top of where the visitor put it: a slow pull-in when the deck first appears, and
+// a gentle sway after a while without input. Neither counts as moving the view (no Reset view).
+function cameraMotion(now) {
+  if (STILL) return { az: 0, el: 0, zoom: 0 };
+  const intro = S.introT0 ? (1 - Math.min(1, (now - S.introT0) / 2600)) ** 3 : 1;
+  const idle = !drag && !S.resetting && now - S.lastInput > 7000;
+  S.driftAmt += ((idle ? 1 : 0) - S.driftAmt) * 0.01;
+  S.drift = S.driftAmt * 0.12 * Math.sin(now / 1000 * TAU / 36);
+
+  return { az: S.drift + 0.35 * intro, el: 0.22 * intro, zoom: -0.55 * intro };
+}
+
+// How loud the record is right now (RMS of the output).
+function readLevel() {
+  if (!analyser || !S.started) return 0;
+  levelBuf ||= new Float32Array(analyser.fftSize);
+  analyser.getFloatTimeDomainData(levelBuf);
+  let sum = 0;
+
+  for (const v of levelBuf) sum += v * v;
+
+  return Math.sqrt(sum / levelBuf.length);
+}
+
+// VU ballistics (about 300 ms) and the light's pulse.
+function animate() {
+  const rms = readLevel(), db = 20 * Math.log10(rms + 1e-9);
+  S.vu += (Math.min(1, Math.max(0, (db + 45) / 33)) - S.vu) * 0.16;   // -45 dB at rest, -12 dB pinned
+  S.pulse += (Math.min(1, rms * 10) - S.pulse) * 0.2;
+}
+
 // ---------- site links printed on the deck ----------
 // The nav and social links stay real links, but are projected onto the top plate so they look printed on it
 // and follow the camera. When they would be too small or off screen (phones, zoomed in or out) they go back
@@ -450,7 +519,7 @@ const LINK_MIN_SCALE = 0.25;       // smallest on-screen size, as a fraction of 
 
 const PRINTS = [
   { el: $('deck-nav'), x: -0.180, y: 0.171, align: 'left' },     // back-left corner, beside the platter
-  { el: $('credit'), x: 0.226, y: -0.156, align: 'right' },      // front-right corner, under the pitch slider
+  { el: $('credit'), x: 0.226, y: -0.120, align: 'right' },      // right side, between the platter and the pitch slider
 ];
 
 const clipOf = (vp, x, y, z, w) => [0, 1, 2, 3].map((i) => vp[i] * x + vp[4 + i] * y + vp[8 + i] * z + vp[12 + i] * w);
@@ -465,8 +534,8 @@ function linkSize(p) {
 
   return p.size;
 }
-// The CSS matrix3d that maps the element's own pixels onto the plate, or null when it should not be printed.
 
+// The CSS matrix3d that maps the element's own pixels onto the plate, or null when it should not be printed.
 function plateMatrix(p, vp, W, H) {
   const { w, h } = linkSize(p), s = LINK_M_PER_PX;
   const A = clipOf(vp, s, 0, 0, 0), B = clipOf(vp, 0, -s, 0, 0);          // element +x = world +x, element +y = toward the viewer

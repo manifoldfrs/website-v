@@ -15,6 +15,10 @@ const P3 = [ARM_LE - 0.040 * CB, 0.040 * SB, -0.0125];
 const TUBE = G.bezier([0, 0, 0], [0.075 * Math.cos(0.28), 0.075 * Math.sin(0.28), -0.003], [P3[0] - 0.075 * CB, P3[1] + 0.075 * SB, -0.0085], P3, 32);
 const REST_PT = TUBE[20];
 const STROBE = [-0.158, -0.160], LAMP = [STROBE[0] + 0.7026 * 0.024, STROBE[1] + 0.7115 * 0.024, -0.013];
+
+// VU meter window on the plate, front right (x0, y0, x1, y1); the needle pivots just inside its front edge
+const VU = [0.140, -0.184, 0.228, -0.152], VU_PIVOT = [(VU[0] + VU[2]) / 2, VU[1] + 0.004], VU_SWING = 0.85;
+
 const BLACK = [0.012, 0.012, 0.013], CHROME = [0.62, 0.63, 0.66], AMBER = [1.0, 0.55, 0.12];
 
 export { DECK_Z };
@@ -66,6 +70,9 @@ export class Renderer {
         G.tube([[-0.002, 0.0090, -0.0132], [0.000, 0.022, -0.0130], [0.002, 0.032, -0.0108], [0.003, 0.036, -0.006]], 0.0013, 10),
         G.box(-0.0225, -0.0068, -0.0246, 0.0035, 0.0068, -0.0142))),
       holder: m(G.box(-0.0075, -0.0052, -0.0272, 0.0050, 0.0052, -0.0246)),
+      vuBezel: m(G.rbox(VU[0], VU[1], VU[2], VU[3], DECK_Z, DECK_Z + 0.0028, 0.003, 0.0006)),
+      vuFace: m(G.box(VU[0] + 0.003, VU[1] + 0.003, DECK_Z + 0.0024, VU[2] - 0.003, VU[3] - 0.003, DECK_Z + 0.0031)),
+      needle: m(G.merge(G.box(-0.00022, 0, 0, 0.00022, 0.0212, 0.0003), G.cyl(0.0011, 0.0011, 0, 0.0006, 16))),
     };
     this.tex = { lut: gl.createTexture(), vis: gl.createTexture(), label: gl.createTexture(), shadow: gl.createTexture() };
     gl.bindTexture(gl.TEXTURE_2D, this.tex.shadow);
@@ -151,7 +158,8 @@ export class Renderer {
     return best;
   }
 
-  // st: { thp, al, zt (stylus height above the disc), zoom, az, el, motor, rpm }
+  // st: { thp, al, zt (stylus height above the disc), zoom, az, el, motor, rpm,
+  //       vu (0..1), pulse (0..1), power }
   draw(st) {
     const gl = this.gl, c = this.canvas, m = this.m, I = G.ident(), info = this.info, ecc = info ? info.ecc : [0, 0];
     const dpr = Math.min(2, window.devicePixelRatio || 1), w = Math.round(c.clientWidth * dpr), h = Math.round(c.clientHeight * dpr);
@@ -163,9 +171,10 @@ export class Renderer {
     const lensM = G.chain(G.T(STROBE[0] + 0.7026 * 0.0185, STROBE[1] + 0.7115 * 0.0185, 0), G.Rz(0.7917));
     const on = st.motor ? 1 : 0, r33 = st.rpm < 40 || st.rpm > 70, r45 = st.rpm > 40, off = [0, 0, 0];
     const glow = (k, col = AMBER) => col.map((v) => v * 2.2 * k);
+    const needleM = G.chain(G.T(VU_PIVOT[0], VU_PIVOT[1], DECK_Z + 0.0032), G.Rz(VU_SWING - 2 * VU_SWING * (st.vu || 0)));
     // [mesh, model, albedo, roughness, metalness, mode, emissive]
     const items = [
-      [m.floor, I, [0.020, 0.020, 0.022], 0.55, 0, 5, off], [m.feet, I, BLACK, 0.8, 0, 0, off],
+      [m.floor, I, [0.016, 0.015, 0.016], 0.55, 0, 5, off], [m.feet, I, BLACK, 0.8, 0, 0, off],
       [m.body, I, BLACK, 0.62, 0, 0, off], [m.plate, I, [0.045, 0.047, 0.052], 0.46, 0.75, 2, off],
       [m.platter, spin, [0.075, 0.075, 0.08], 0.36, 1, 3, off], [m.mat, spin, [0.010, 0.010, 0.010], 0.9, 0, 0, off],
       [m.spindle, I, CHROME, 0.14, 1, 1, off],
@@ -177,6 +186,10 @@ export class Renderer {
       [m.tube, arm, [0.30, 0.30, 0.32], 0.16, 1, 0, off], [m.weight, arm, [0.022, 0.022, 0.024], 0.42, 0.7, 0, off], [m.dial, arm, CHROME, 0.28, 1, 0, off],
       [m.collar, head, CHROME, 0.2, 1, 0, off], [m.shell, head, [0.014, 0.014, 0.015], 0.4, 0.2, 0, off], [m.holder, head, [0.80, 0.36, 0.05], 0.42, 0, 0, off],
     ];
+
+    items.push([m.vuBezel, I, [0.018, 0.018, 0.019], 0.4, 0.4, 0, off], [m.vuFace, I, [0.62, 0.5, 0.32], 0.55, 0, 6, glow(st.power ? 0.16 : 0, [1.0, 0.62, 0.26])],
+      [m.needle, needleM, [0.012, 0.010, 0.009], 0.4, 0, 0, off]);
+
     if (info) items.push([m.edge, discM, [0.008, 0.008, 0.008], 0.22, 0, 0, off]);
 
     // 1. shadow map from the key light
@@ -193,17 +206,21 @@ export class Renderer {
     gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, this.tex.shadow);
     const common = (u) => {
       gl.uniformMatrix4fv(u.uVP, false, cam.vp); gl.uniformMatrix4fv(u.uLVP, false, this.lvp); gl.uniform3fv(u.uEye, cam.eye);
-      gl.uniform1i(u.uShadow, 3); gl.uniform4f(u.uLamp, LAMP[0], LAMP[1], LAMP[2], on);
+      gl.uniform1i(u.uShadow, 3); gl.uniform4f(u.uLamp, LAMP[0], LAMP[1], LAMP[2], on); gl.uniform1f(u.uPulse, st.pulse || 0);
     };
     let u = this.std.u;
-    gl.useProgram(this.std.p); common(u); gl.uniform2f(u.uPivot, PIVOT_X, PIVOT_Y);
+    gl.useProgram(this.std.p); common(u); gl.uniform2f(u.uPivot, PIVOT_X, PIVOT_Y); gl.uniform4f(u.uVu, ...VU);
     for (const [mesh, M, col, rough, metal, mode, emis] of st.bare ? items.slice(1) : items) {      // bare: no table under the deck
       gl.uniformMatrix4fv(u.uM, false, M); gl.uniform3fv(u.uCol, col); gl.uniform3fv(u.uEmis, emis);
       gl.uniform1f(u.uRough, rough); gl.uniform1f(u.uMetal, metal); gl.uniform1i(u.uMode, mode);
       gl.bindVertexArray(mesh.vao); gl.drawArrays(gl.TRIANGLES, 0, mesh.count);
     }
-    if (!info) return;
-    u = this.rec.u;
+
+    if (info) this.drawDisc(info, discM, common);
+  }
+
+  drawDisc(info, discM, common) {
+    const gl = this.gl, m = this.m, u = this.rec.u;
     gl.useProgram(this.rec.p); common(u); gl.uniformMatrix4fv(u.uM, false, discM);
     gl.uniform3fv(u.uWarp, info.warp); gl.uniform4fv(u.uScr, info.scr); gl.uniform1i(u.uNScr, info.nScr);
     gl.uniform1f(u.uRLo, info.rLo); gl.uniform1f(u.uRHi, info.rHi); gl.uniform1f(u.uRows, info.rows);
