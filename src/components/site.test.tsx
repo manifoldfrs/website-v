@@ -6,6 +6,7 @@ import { CreationArtwork } from "@/components/creation-artwork"
 import { Footer } from "@/components/footer"
 import { PostList } from "@/components/post-list"
 import { TransitionLink } from "@/components/transition-link"
+import { Turntable } from "@/components/turntable"
 import type { PostSummary } from "@/lib/blog"
 
 const post: PostSummary = {
@@ -49,6 +50,26 @@ test("the shipped artwork is self-contained and defaults to a still image", asyn
   assert.ok(svg.includes("@media(prefers-reduced-motion:no-preference)"))
   assert.ok(!svg.includes("<script"))
   assert.ok(!svg.includes("<image"))
+})
+
+test("the turntable links to writing, about and social profiles without JavaScript", () => {
+  const html = renderToStaticMarkup(<Turntable />)
+  assert.ok(html.includes('href="/blog"'))
+  assert.ok(html.includes('href="/about"'))
+  assert.ok(html.indexOf('href="/about"') < html.indexOf('href="/blog"'))
+  assert.ok(html.includes('aria-label="GitHub"'))
+  assert.ok(html.includes("https://github.com/manifoldfrs"))
+  assert.ok(html.includes("https://x.com/frshbb"))
+  assert.ok(html.includes("https://linkedin.com/in/farishabib"))
+})
+
+test("the turntable renders every element the vinyl engine looks up by id", async () => {
+  const engine = await readFile("public/vinyl/src/main.js", "utf8")
+  const ids = new Set([...engine.matchAll(/\$\('([\w-]+)'\)/g)].map((match) => match[1]))
+  const html = renderToStaticMarkup(<Turntable />)
+  assert.ok(ids.size > 20)
+
+  for (const id of ids) assert.ok(html.includes(`id="${id}"`), `missing #${id}`)
 })
 
 test("footer retains social destinations without music or contact controls", () => {

@@ -1,6 +1,6 @@
 # heyfar.is
 
-Faris Habib's personal website, built with Next.js 16 and a Tokyo Night color palette.
+Faris Habib's personal website, built with Next.js 16. The homepage is a record player playing a vinyl cut of a song, and the whole site uses the turntable's palette.
 
 ## Stack
 
@@ -8,7 +8,16 @@ Faris Habib's personal website, built with Next.js 16 and a Tokyo Night color pa
 - Tailwind CSS v4 and native CSS view transitions
 - Georgia for headings and prose, system monospace for navigation and dates
 - Markdown posts loaded through the Effect-based `src/lib/blog` API
-- A pre-rendered, animated SVG hero and a lossless pixel-art landscape
+- A WebGL2 + Web Audio turntable remixed from [rauchg/vinyl](https://github.com/rauchg/vinyl) (MIT), in `public/vinyl`
+- A black-and-white Scotland photo on the about page
+
+## Changing the record
+
+```bash
+bun scripts/vinyl-lathe.mjs "path/to/song.mp3"
+```
+
+This needs `ffmpeg`. It cuts the song into a groove and writes `public/vinyl/assets/`; then set the title in `public/vinyl/src/records.js`. Keep each `record.flac` under 25 MiB (about four minutes of music).
 
 ## Development
 

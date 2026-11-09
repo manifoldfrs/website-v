@@ -2,7 +2,7 @@
 
 ## Project Snapshot
 - Repo type: single Next.js application (App Router) with no workspaces.
-- Stack: Next.js 16, React 19, TypeScript strict, Tailwind CSS v4, Effect.js, Framer Motion, R3F.
+- Stack: Next.js 16, React 19, TypeScript strict, Tailwind CSS v4, Effect.js, and a raw WebGL2 + Web Audio record player on the homepage.
 - Primary data path: markdown posts in `src/content/posts` loaded via `src/lib/blog`.
 - This is a content+experience site with a client-side visual layer but server-rendered routing and pages.
 
@@ -84,6 +84,7 @@
 - Keep 3D/visual-heavy modules isolated and loaded client-only when necessary.
 - For motion, keep transitions purposeful and avoid excessive autoplay loops that increase CPU on first paint.
 - Avoid placing heavy WebGL/Canvas code in multiple files; centralize in the established component.
+- The homepage turntable is remixed from rauchg/vinyl (MIT): plain ES modules in `public/vinyl/src`, outside the bundler. `src/components/turntable.tsx` renders the markup `public/vinyl/src/main.js` finds by id, once, in the root layout, so the music keeps playing across client-side navigation; on other pages only the now-playing pill shows. Internal links must stay client-side (`TransitionLink`), or a full page load stops the music. Keep `public/vinyl/LICENSE`. Cut a new record with `bun scripts/vinyl-lathe.mjs <audio-file>`.
 
 ## Security and Privacy
 - Secrets belong in `.env.local` only.

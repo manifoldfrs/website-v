@@ -24,6 +24,22 @@ const socialLinks: { label: string; href: string; icon: ReactNode }[] = [
   { label: "LinkedIn", href: "https://linkedin.com/in/farishabib", icon: LinkedInIcon },
 ]
 
+/** GitHub, X and LinkedIn as icon links, shared by the footer and the homepage turntable. */
+export function SocialLinks() {
+  return socialLinks.map((link) => (
+    <a
+      key={link.label}
+      href={link.href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={link.label}
+      data-cursor-hover
+    >
+      {link.icon}
+    </a>
+  ))
+}
+
 /** Copyright and social links, without contact or music controls. */
 export function Footer() {
   return (
@@ -33,18 +49,7 @@ export function Footer() {
           © {new Date().getFullYear()} Faris Habib. All Rights Reserved.
         </p>
         <div className="social-links">
-          {socialLinks.map((link) => (
-            <a
-              key={link.label}
-              href={link.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={link.label}
-              data-cursor-hover
-            >
-              {link.icon}
-            </a>
-          ))}
+          <SocialLinks />
         </div>
       </div>
     </footer>

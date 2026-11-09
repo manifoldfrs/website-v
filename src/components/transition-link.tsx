@@ -8,23 +8,16 @@ interface TransitionLinkProps {
   readonly children: ReactNode
   readonly className?: string
   readonly ariaLabel?: string
-  readonly current?: "page"
 }
 
-/** Keeps native document transitions while preserving Link's accessible anchor behavior. */
-export function TransitionLink({ href, children, className, ariaLabel, current }: TransitionLinkProps) {
+/** A client-side navigation link: the page animates through React view transitions and the turntable keeps playing. */
+export function TransitionLink({ href, children, className, ariaLabel }: TransitionLinkProps) {
   return (
     <Link
       href={href}
-      prefetch={false}
       className={className}
       aria-label={ariaLabel}
-      aria-current={current}
       data-cursor-hover
-      onNavigate={(event) => {
-        event.preventDefault()
-        window.location.assign(href)
-      }}
     >
       {children}
     </Link>

@@ -12,7 +12,7 @@
 - `bun x tsc --noEmit`
 
 ## Design System
-- Theme tokens live in `src/app/globals.css`. Background is navy (`#0e121a`), accent is Superman red (`#e60026`), secondary accent is yellow (`#fcea0e`, used sparingly), text uses neutral grays.
+- Theme tokens live in `src/app/globals.css` and match the homepage turntable: near-black background (`#0c0c0d`) under a soft grey radial light, warm off-white text (`#e8e4dd`), warm grays for prose and muted text, and one amber accent (`#ffb454`) for links, focus, and highlights.
 - Fonts (loaded in `src/app/layout.tsx`, exposed as CSS vars / Tailwind families):
   - `font-display` → Archivo (expanded width). Apply the `.display` class for the wordmark and large numerals (uppercase, widest width axis).
   - `font-serif` → IBM Plex Serif. Default body font; used for prose.
@@ -28,7 +28,7 @@
 - ✅ DO: Use `next/link` for internal navigation (see `src/components/sidebar.tsx`).
 - ✅ DO: Use Tailwind theme tokens from `globals.css` (`text-muted-foreground`, `text-accent`, `bg-background`).
 - ✅ DO: Keep motion minimal — CSS transitions for hover/active states. No animation libraries.
-- ❌ DON'T: Add Framer Motion, React Three Fiber, Lenis, or a custom cursor back in. The site is intentionally static and minimal.
+- ❌ DON'T: Add Framer Motion, React Three Fiber, Lenis, or a custom cursor back in. Pages are static and minimal; the only canvas is the homepage turntable (`turntable.tsx`, engine in `public/vinyl/src`).
 - ❌ DON'T: Use `dangerouslySetInnerHTML` unless rendering already-sanitized markdown like `src/components/post-body.tsx`.
 
 ## Touch Points / Key Files

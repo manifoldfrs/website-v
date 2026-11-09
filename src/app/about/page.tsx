@@ -19,10 +19,10 @@ export default function AboutPage() {
       </div>
       <figure className="about-photo">
         <Image
-          src="/images/scotland-pixel-art.webp"
-          alt="Pixel-art interpretation of the Scotland landscape"
-          width={1448}
-          height={1086}
+          src="/images/scotland.webp"
+          alt="Black-and-white photo of hills across the water in Scotland"
+          width={2400}
+          height={1800}
           preload
           unoptimized
         />
