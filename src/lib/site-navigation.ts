@@ -7,6 +7,6 @@ export const routeLinks = [
 
 export const socialLinks = [
   { label: "GitHub", href: "https://github.com/manifoldfrs" },
-  { label: "X", href: "https://x.com/frshbb" },
+  { label: "X", href: "https://x.com/farrrr_is" },
   { label: "LinkedIn", href: "https://linkedin.com/in/farishabib" },
 ] as const

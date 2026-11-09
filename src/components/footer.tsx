@@ -20,7 +20,7 @@ const LinkedInIcon = (
 
 const socialLinks: { label: string; href: string; icon: ReactNode }[] = [
   { label: "GitHub", href: "https://github.com/manifoldfrs", icon: GitHubIcon },
-  { label: "X", href: "https://x.com/frshbb", icon: XIcon },
+  { label: "X", href: "https://x.com/farrrr_is", icon: XIcon },
   { label: "LinkedIn", href: "https://linkedin.com/in/farishabib", icon: LinkedInIcon },
 ]
 
