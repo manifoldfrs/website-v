@@ -1,6 +1,7 @@
 // UI: wires the renderer, the mastering worker and the audio-thread physics engine together.
 import { Renderer, DECK_Z } from './render.js';
-import { TAU } from './dsp.js';
+import { TAU, onePole, rng } from './dsp.js';
+import { FIRE } from './shaders.js';
 import { RECORDS } from './records.js';
 import { press, makeVis } from './press.js';
 import { PIVOT_X, PIVOT_Y, ALPHA_REST, R_DISC, R_LABEL, R_LEADIN, W33, alphaForRadius, stylusXY } from './geometry.js';
@@ -23,14 +24,16 @@ const busy = (h = { got: 0, total: 0 }) => (window.__load = h);
 const idle = () => { if (window.__load) window.__load.done = true; };
 const AZ0 = -0.5, EL0 = 0.6;   // default camera
 
+const FIRE_REST = 0.85;   // the fire's brightness when no music is playing
+
 const S = {
   tel: null, tRecv: 0, zoom: 0, zoomT: 0, az: AZ0, el: EL0, rpm: 33.3333, rec: null, pending: null, motor: false, cue: true, ready: false,
-  vu: 0, pulse: 0, drift: 0, driftAmt: 0, lastInput: performance.now(), introT0: 0,
+  side: 'playing', runout: null, stopTimer: 0, vu: 0, warm: 0, level: 0, levelAvg: 0, fireK: FIRE_REST, drift: 0, driftAmt: 0, lastInput: performance.now(), introT0: 0,
 };
 
 const STILL = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-let ctx = null, node = null, drag = null, analyser = null, levelBuf = null;
+let ctx = null, node = null, drag = null, analyser = null, levelBuf = null, room = null;
 // ?og renders just the deck on black, with no interface and no audio: it is how og.png (the share image) is made
 const OG = new URLSearchParams(location.search).has('og');
 if (OG) document.documentElement.classList.add('og');
@@ -71,11 +74,15 @@ function loadRecord() {
   S.loaded = true;
   if (S.started) play(); else start();
 }
-const play = () => { setMotor(true); setTimeout(() => send({ t: 'cueTo', al: alphaForRadius(R_LEADIN - 0.0012) }), 400); };
+const play = () => { sidePlaying(); setMotor(true); setTimeout(() => send({ t: 'cueTo', al: alphaForRadius(R_LEADIN - 0.0012) }), 400); };
 // Nothing moves until all three are true: the user powered on, the engine is warm, and a record is in it.
+// Then the amplifier's relay closes, its output comes up, and the platter starts.
 function start() {
   if (!S.on || !S.ready || !S.loaded || S.started) return;
-  S.started = true; $('power').hidden = true; document.documentElement.classList.add('turntable-on'); play();
+  S.started = true; $('power').hidden = true; document.documentElement.classList.add('turntable-on');
+  relayClick();
+  room.out.gain.setTargetAtTime(1, ctx.currentTime + 0.2, 0.18);
+  setTimeout(play, 550);
 }
 
 // ---------- precompiled record (lathe.mjs): the clean cut ships as DPCM; decode it, press it here, go ----------
@@ -159,7 +166,7 @@ function initAudio() {
         S.ready = true; pushParams(); loadRecord(); start();
       } else if (m.t === 'log') console.warn(m.msg);
     };
-    node.connect(ctx.destination);
+    room = listeningRoom(); node.connect(room.in); setRoom();
     analyser = ctx.createAnalyser(); analyser.fftSize = 2048; node.connect(analyser);
     if (!S.on && ctx.state === 'running') await ctx.suspend();   // some browsers start it unasked; stay silent until power-on
   })().catch((err) => { audioInit = null; ctx = null; node = null; throw err; });
@@ -187,6 +194,63 @@ async function powerOn() {
     if (err.message !== 'not started') console.error(err);
   }
 }
+// ---------- the listening room ----------
+// What comes after the preamp: an amplifier that rounds off the peaks a little, a pair of speakers that roll
+// off at both ends, and the room they stand in. The Room slider mixes that in; at 0 none of it is in the path.
+function listeningRoom() {
+  const gain = (v) => { const g = ctx.createGain(); g.gain.value = v; return g; };
+  const filter = (type, f, q, db = 0) => { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; b.gain.value = db; return b; };
+  const input = gain(1), out = gain(0), direct = gain(1), speakers = gain(0), air = gain(0);   // out is faded up at power-on
+  const amp = ctx.createWaveShaper(), walls = ctx.createConvolver(), curve = new Float32Array(1025);
+  const sat = (x) => Math.tanh(0.9 * (x + 0.06)), slope = 0.9 * (1 - sat(0) ** 2);   // slightly lopsided, like a valve; unity gain for small signals
+  for (let i = 0; i < curve.length; i++) curve[i] = (sat(i / 512 - 1) - sat(0)) / slope;
+  amp.curve = curve;
+  walls.normalize = false; walls.buffer = roomResponse();
+  const chain = [amp, filter('highpass', 36, 0.7), filter('lowshelf', 140, 0, 1.5), filter('lowpass', 15500, 0.6)];
+  chain.reduce((a, b) => (a.connect(b), b), input).connect(speakers);
+  chain[chain.length - 1].connect(walls); walls.connect(air);
+  input.connect(direct);
+  for (const g of [direct, speakers, air]) g.connect(out);
+  out.connect(ctx.destination);
+  return { in: input, out, direct, speakers, air };
+}
+// A furnished room's impulse response: a few early reflections, then a short tail that gets duller as it decays.
+function roomResponse() {
+  const fs = ctx.sampleRate, n = Math.round(0.55 * fs), buf = ctx.createBuffer(2, n, fs), R = rng(2024);
+  const early = [[[7.9, 0.5], [13.3, 0.38], [24.1, -0.3], [31.3, 0.22]], [[9.5, 0.5], [15.1, -0.36], [22.7, 0.3], [34.9, 0.2]]];
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    let lp = 0, energy = 0;
+    for (const [ms, g] of early[ch]) d[Math.round(ms * 1e-3 * fs)] += g;
+    for (let i = Math.round(0.012 * fs); i < n; i++) {
+      const t = i / fs;
+      lp += onePole(900 + 6000 * Math.exp(-t / 0.12), fs) * (R.gauss() - lp);
+      d[i] += 0.35 * lp * Math.exp(-t / 0.085) * Math.min(1, (t - 0.012) / 0.02);
+    }
+    for (let i = 0; i < n; i++) energy += d[i] * d[i];
+    const k = 1 / Math.sqrt(energy);
+    for (let i = 0; i < n; i++) d[i] *= k;
+  }
+  return buf;
+}
+function setRoom() {
+  if (!room) return;
+  const a = +$('p-room').value, t = ctx.currentTime;
+  room.direct.gain.setTargetAtTime(1 - a, t, 0.03); room.speakers.gain.setTargetAtTime(a, t, 0.03); room.air.gain.setTargetAtTime(0.4 * a, t, 0.03);
+}
+// The amplifier's output relay closing: two contact ticks a few milliseconds apart.
+function relayClick() {
+  const fs = ctx.sampleRate, n = Math.round(0.04 * fs), buf = ctx.createBuffer(1, n, fs), d = buf.getChannelData(0), R = rng(5);
+  for (const [t0, g] of [[0, 0.11], [0.009, 0.045]]) {
+    for (let i = Math.round(t0 * fs); i < n; i++) {
+      const t = i / fs - t0;
+      d[i] += g * ((R() * 2 - 1) * Math.exp(-t / 0.0012) + 0.5 * Math.sin(TAU * 2300 * t) * Math.exp(-t / 0.004));
+    }
+  }
+  const src = ctx.createBufferSource();
+  src.buffer = buf; src.connect(ctx.destination); src.start();
+}
+
 // What the power button says while we wait (the progress bar itself is driven from index.html).
 function powerMsg() {
   const el = $('power-msg');
@@ -206,8 +270,8 @@ function pushParams() {
   send({ t: 'set', volume: 0.8 * +$('p-volume').value, stylus: $('p-stylus').value, vtf: +$('p-vtf').value, antiskate: +$('p-antiskate').value, hum: +$('p-hum').value });
 }
 for (const el of document.querySelectorAll('#ctl input[type=range]')) {
-  const out = el.parentElement.querySelector('output'), show = () => { out.textContent = el.id === 'p-volume' ? Math.round(el.value * 100) + '%' : (+el.value).toFixed(2); };
-  el.addEventListener('input', () => { show(); if (el.id.startsWith('p-')) pushParams(); }); show();
+  const out = el.parentElement.querySelector('output'), show = () => { out.textContent = el.id === 'p-volume' || el.id === 'p-room' ? Math.round(el.value * 100) + '%' : (+el.value).toFixed(2); };
+  el.addEventListener('input', () => { show(); if (el.id === 'p-room') setRoom(); else if (el.id.startsWith('p-')) pushParams(); }); show();
 }
 $('p-stylus').addEventListener('change', pushParams);
 const toggle = (btn, panel, onChange) => $(btn).addEventListener('click', () => {
@@ -229,10 +293,12 @@ $('t-reset').addEventListener('click', () => {      // ease the camera back to w
   S.zoomT = 0; S.resetting = true;
   S.az = AZ0 + ((((S.az - AZ0 + Math.PI) % TAU) + TAU) % TAU) - Math.PI;   // unwind full turns first
 });
-$('b-start').addEventListener('click', () => setMotor(!S.motor));
+// Start / stop. Once the side has finished and the arm has gone home, starting plays it again from the top.
+const toggleMotor = () => { if (!S.motor && S.side === 'ended') play(); else setMotor(!S.motor); };
+$('b-start').addEventListener('click', toggleMotor);
 // the now-playing pill on other pages: the needle stays down, so the record winds down and back up in pitch
 
-$('t-play').addEventListener('click', () => setMotor(!S.motor));
+$('t-play').addEventListener('click', toggleMotor);
 $('b-cue').addEventListener('click', () => send({ t: 'cue', up: !S.cue }));
 $('b-bump').addEventListener('click', () => send({ t: 'bump', s: 1 }));
 $('b-press').addEventListener('click', pressAgain);
@@ -335,7 +401,7 @@ addEventListener('keydown', (e) => {
   if (!deckShown()) return;
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
   noteInput();
-  if (e.code === 'Space') { e.preventDefault(); setMotor(!S.motor); }
+  if (e.code === 'Space') { e.preventDefault(); toggleMotor(); }
   else if (e.key === 'c') send({ t: 'cue', up: !S.cue });
   else if (e.key === 'b') send({ t: 'bump', s: 1 });
   else if (e.key === 'z') S.zoomT = S.zoomT > 0.5 ? 0 : 0.92;
@@ -428,12 +494,28 @@ function drawStats() {
   // and never a track of the previous record while the new one loads
   // (a new record is put on with the needle lifted: until it has been up once, it is still settling on the old radius)
   const rec = S.rec && S.rec.pick === pick && t.recSeq === S.rec.seq && (S.rec.lifted ||= !down) ? S.rec : null;
+  endOfSide(t, rec, down);
   const k = rec && down && t.xg === t.xg ? rec.tracks.find((k) => t.theta >= k.theta0 && t.theta < k.theta1) : null;
   if (k) nowPlaying(k.title, `${fmt((t.theta - k.theta0) / W33)} / ${fmt((k.theta1 - k.theta0) / W33)}`, Math.abs(t.wp) * 60 / TAU > 5);
   else if (!rec) nowPlaying(S.recTitle || 'Records');
   else nowPlaying(S.recTitle || 'Records', !down ? '' : t.xg !== t.xg ? 'off the groove'
     : t.theta >= S.rec.thetaLock ? 'run-out' : t.theta > S.rec.tracks[S.rec.tracks.length - 1].theta1 ? 'lead-out' : t.theta < S.rec.tracks[0].theta0 ? 'lead-in' : 'between tracks');
 }
+
+// The end of the side: after ten turns in the run-out groove the arm lifts and goes home, then the platter stops.
+// S.side is 'playing', then 'lifting' until the needle has left the record, then 'ended' until one is put down again.
+const RUNOUT_TURNS = 10;
+function endOfSide(t, rec, down) {
+  if (S.side === 'lifting') { if (!down) S.side = 'ended'; return; }
+  if (S.side === 'ended' && down) sidePlaying();
+  if (!rec || !down || !S.motor || !(t.theta >= rec.thetaLock)) { S.runout = null; return; }
+  S.runout ??= t.thp;
+  if (t.thp - S.runout < RUNOUT_TURNS * TAU) return;
+  S.runout = null; S.side = 'lifting';
+  send({ t: 'cueTo', al: ALPHA_REST });
+  S.stopTimer = setTimeout(() => setMotor(false), 3500);
+}
+function sidePlaying() { S.side = 'playing'; clearTimeout(S.stopTimer); }
 
 // ---------- frame loop ----------
 let frame = 0;
@@ -460,14 +542,14 @@ function tick() {
   if (moved !== S.moved) { S.moved = moved; $('t-reset').hidden = !moved; }
 
   if (deckShown()) guard('render', () => {
-    if (OG) renderer.draw({ thp: 2.2, al: alphaForRadius(0.108), zt: 0, zoom: 0, az: -0.5, el: 0.6, motor: true, rpm: 33.3333, bare: true, dist: 1.1, at: [0.021, -0.07, -0.093], ...window.__og });   // deck high in the frame: X overlays the bottom
+    if (OG) renderer.draw({ thp: 2.2, al: alphaForRadius(0.108), zt: 0, zoom: 0, az: -0.5, el: 0.6, motor: true, rpm: 33.3333, bare: true, dist: 1.1, at: [0.021, -0.07, -0.093], vu: 0, warm: 1, fire: [...FIRE, 1], grain: 0, ...window.__og });   // deck high in the frame: X overlays the bottom
     else {
       const now = performance.now(), cam = cameraMotion(now);
       animate();
       renderer.draw({
-        thp: t ? t.thp + t.wp * dt : 0, al: t ? t.al : ALPHA_REST, zt: t ? t.zb + t.ze : 5e-3, motor: S.motor, rpm: S.rpm,
-        zoom: S.zoom + cam.zoom, az: S.az + cam.az, el: Math.min(1.55, S.el + cam.el),
-        vu: S.vu, pulse: STILL ? 0 : S.pulse, power: !!S.started,
+        thp: t ? t.thp + t.wp * dt : 0, al: t ? t.al : ALPHA_REST, zt: t ? t.zb + t.ze : 5e-3, ze: t ? t.ze : 0, xi: t ? t.xi : 0,
+        motor: S.motor, rpm: S.rpm, zoom: S.zoom + cam.zoom, az: S.az + cam.az, el: Math.min(1.55, S.el + cam.el),
+        vu: S.vu, warm: S.warm, fire: firelight(), grain: STILL ? 0 : Math.floor(now / 42),   // grain changes 24 times a second
       });
     }
   });
@@ -502,11 +584,25 @@ function readLevel() {
   return Math.sqrt(sum / levelBuf.length);
 }
 
-// VU ballistics (about 300 ms) and the light's pulse.
+// VU ballistics (about 300 ms), the level the fire follows, and the lamps coming on after power-on.
 function animate() {
   const rms = readLevel(), db = 20 * Math.log10(rms + 1e-9);
   S.vu += (Math.min(1, Math.max(0, (db + 45) / 33)) - S.vu) * 0.16;   // -45 dB at rest, -12 dB pinned
-  S.pulse += (Math.min(1, rms * 10) - S.pulse) * 0.2;
+  S.level += (rms - S.level) * (rms > S.level ? 0.6 : 0.12);          // jumps with a hit, falls back in about 150 ms
+  S.levelAvg += (rms - S.levelAvg) * 0.008;                           // how loud the song has been over the last two seconds
+  S.warm += ((S.started ? 1 : 0) - S.warm) * (STILL ? 1 : 0.04);
+}
+
+// The fire burns in time with the record: it flares when the music jumps above its recent average and sinks
+// back between hits, so it follows the beat at any volume. With no music it glows steadily, and the flames
+// lean with the level, which moves the shadows a little. Steady for visitors who asked for less motion.
+function firelight() {
+  if (STILL) return [...FIRE, 1];
+  const playing = S.levelAvg > 1e-4, hit = playing ? Math.min(2.2, S.level / S.levelAvg) : 1;
+  const to = playing ? 0.62 + 0.4 * hit : FIRE_REST;
+  S.fireK += (to - S.fireK) * 0.35;
+  const lean = S.fireK - FIRE_REST, d = [FIRE[0], FIRE[1] + 0.06 * lean, FIRE[2] + 0.05 * lean], l = Math.hypot(...d);
+  return [d[0] / l, d[1] / l, d[2] / l, S.fireK];
 }
 
 // ---------- site links printed on the deck ----------

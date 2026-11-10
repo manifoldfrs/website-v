@@ -1,6 +1,8 @@
 /* The homepage record player (src/components/turntable.tsx), remixed from rauchg/vinyl's index.html */
 
 html:has(.deck[data-home]), html:has(.deck[data-home]) body { height: 100%; overflow: hidden; }
+/* behind the deck until it has been drawn: the dark room, with the fire's glow off to the left */
+html:has(.deck[data-home]) body { background: radial-gradient(ellipse at 24% 62%, #1d120a 0%, #070504 64%) fixed, #070504; }
 body:has(> .deck[data-home]) > .site-shell > :is(.site-header, .site-footer) { display: none; }
 
 /* every other page: only the now-playing pill, once the record has been started on the homepage */
@@ -24,7 +26,7 @@ html:not(.turntable-on) .deck:not([data-home]) #toggles { display: none; }
 
 #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; opacity: 0; transition: opacity .55s ease-out; }
 .ready #gl { opacity: 1; }
-#vig { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 46%, transparent 36%, rgba(6, 4, 2, .74) 100%); }
+#vig { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 47% 47%, transparent 34%, rgba(9, 4, 1, .8) 100%); }
 
 #loader { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 7; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 18px 10px; border-radius: 10px; opacity: 0; transition: opacity .25s; pointer-events: none; color: var(--muted-foreground); font: 10px var(--mono); }
 .loading #loader { opacity: 1; }

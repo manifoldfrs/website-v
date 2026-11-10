@@ -1,7 +1,7 @@
 // WebGL2 scene: a dark direct-drive style deck, the disc (drawn from the cut geometry) and the tonearm.
 // World = physics world: origin at the spindle, +x right, +y away from the viewer, +z up, metres.
 import * as G from './gl-util.js';
-import { STD_VS, STD_FS, REC_VS, REC_FS, DEPTH_FS, KEY } from './shaders.js';
+import { STD_VS, STD_FS, REC_VS, REC_FS, DEPTH_FS, POST_VS, BRIGHT_FS, BLUR_FS, FINAL_FS, KEY } from './shaders.js';
 import { TAU } from './dsp.js';
 import { drawLabel } from './label.js';
 import {
@@ -20,15 +20,19 @@ const STROBE = [-0.158, -0.160], LAMP = [STROBE[0] + 0.7026 * 0.024, STROBE[1] +
 const VU = [0.140, -0.184, 0.228, -0.152], VU_PIVOT = [(VU[0] + VU[2]) / 2, VU[1] + 0.004], VU_SWING = 0.85;
 
 const BLACK = [0.012, 0.012, 0.013], CHROME = [0.62, 0.63, 0.66], AMBER = [1.0, 0.55, 0.12];
+// the stylus cantilever hinges in the cartridge here (headshell frame) and reaches CANT_L forward to the tip
+const CANT = [-0.0045, 0, -0.0270], CANT_L = 0.0045;
+const BLOOM = 1.6, GRAIN = 0.022;
 
 export { DECK_Z };
 
 export class Renderer {
   constructor(canvas) {
-    const gl = this.gl = canvas.getContext('webgl2', { antialias: true, alpha: false });
+    const gl = this.gl = canvas.getContext('webgl2', { antialias: false, alpha: false });   // the scene is antialiased in its own buffer (see target)
     if (!gl) throw new Error('WebGL2 is required');
     this.canvas = canvas;
     this.std = G.program(gl, STD_VS, STD_FS); this.rec = G.program(gl, REC_VS, REC_FS); this.dep = G.program(gl, STD_VS, DEPTH_FS);
+    this.bright = G.program(gl, POST_VS, BRIGHT_FS); this.blur = G.program(gl, POST_VS, BLUR_FS); this.final = G.program(gl, POST_VS, FINAL_FS);
     const m = (d) => G.mesh(gl, d), L = G.lathe, at = (d, x, y, z = 0) => [d, [x, y, z]];
     const foot = L([[0, FLOOR_Z], [0.026, FLOOR_Z], [0.028, FLOOR_Z + 0.002], [0.028, -0.066], [0.024, -0.062], [0, -0.062]], 32);
     const led = L([[0.0016, 0], [0.0016, 0.0006], [0, 0.0006]], 12);
@@ -65,10 +69,11 @@ export class Renderer {
       // headshell frame (+x = direction of groove travel, stylus tip at z = -PIVOT_H)
       collar: m(G.merge(at(G.alongX(L([[0.0042, -0.047], [0.0060, -0.047], [0.0060, -0.036], [0.0042, -0.036]], 24)), 0, 0, -0.0125),
         at(G.cyl(0.0014, 0.0014, -0.0122, -0.0116, 10), -0.012, 0.0045), at(G.cyl(0.0014, 0.0014, -0.0122, -0.0116, 10), -0.012, -0.0045),
-        G.tube([[-0.0045, 0, -0.0270], [0, 0, -0.0297]], 0.00035, 8), G.cyl(0.00004, 0.0004, -0.0300, -0.0296, 8))),
+        at(G.cyl(0.0007, 0.0007, -0.0274, -0.0266, 10), CANT[0], 0))),
+      cantilever: m(G.merge(G.tube([CANT, [-0.0002, 0, -0.0296]], 0.00021, 8), G.cyl(0.00002, 0.00027, -0.0300, -0.0295, 8))),
       shell: m(G.merge(G.rbox(-0.037, -0.0095, 0.012, 0.0095, -0.0142, -0.0122, 0.003, 0.0005),
         G.tube([[-0.002, 0.0090, -0.0132], [0.000, 0.022, -0.0130], [0.002, 0.032, -0.0108], [0.003, 0.036, -0.006]], 0.0013, 10),
-        G.box(-0.0225, -0.0068, -0.0246, 0.0035, 0.0068, -0.0142))),
+        G.rbox(-0.0225, -0.0068, 0.0035, 0.0068, -0.0246, -0.0142, 0.0016, 0.0002))),
       holder: m(G.box(-0.0075, -0.0052, -0.0272, 0.0050, 0.0052, -0.0246)),
       vuBezel: m(G.rbox(VU[0], VU[1], VU[2], VU[3], DECK_Z, DECK_Z + 0.0028, 0.003, 0.0006)),
       vuFace: m(G.box(VU[0] + 0.003, VU[1] + 0.003, DECK_Z + 0.0024, VU[2] - 0.003, VU[3] - 0.003, DECK_Z + 0.0031)),
@@ -93,6 +98,39 @@ export class Renderer {
 
   // art: the record's cover image, or null for the printed paper label
   setArt(art) { this.art = art; this.setLabel(this.titles); }
+
+  // Where the scene is drawn before the post pass: a multisampled buffer, the texture it resolves to,
+  // and two quarter-size textures for the bloom. Remade when the canvas changes size.
+  target(w, h) {
+    const gl = this.gl, old = this.rt;
+    if (old && old.w === w && old.h === h) return old;
+    if (old) {
+      for (const f of [old.scene, old.flat, ...old.bloom.map((b) => b.fbo)]) gl.deleteFramebuffer(f);
+      for (const r of [old.color, old.depth]) gl.deleteRenderbuffer(r);
+      for (const t of [old.tex, ...old.bloom.map((b) => b.tex)]) gl.deleteTexture(t);
+    }
+    const samples = Math.min(4, gl.getParameter(gl.MAX_SAMPLES));
+    const buffer = (format, attach) => {
+      const r = gl.createRenderbuffer();
+      gl.bindRenderbuffer(gl.RENDERBUFFER, r); gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, format, w, h);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, attach, gl.RENDERBUFFER, r);
+      return r;
+    };
+    const texture = (tw, th) => {
+      const t = gl.createTexture(), fbo = gl.createFramebuffer();
+      gl.bindTexture(gl.TEXTURE_2D, t); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, tw, th, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      for (const [p, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, p, v);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+      return { tex: t, fbo, w: tw, h: th };
+    };
+    const scene = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, scene);
+    const color = buffer(gl.RGBA8, gl.COLOR_ATTACHMENT0), depth = buffer(gl.DEPTH_COMPONENT24, gl.DEPTH_ATTACHMENT);
+    const flat = texture(w, h), bw = Math.max(1, w >> 2), bh = Math.max(1, h >> 2);
+    this.rt = { w, h, scene, color, depth, flat: flat.fbo, tex: flat.tex, bloom: [texture(bw, bh), texture(bw, bh)] };
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return this.rt;
+  }
 
   setLabel(titles) {
     this.titles = titles;
@@ -158,36 +196,41 @@ export class Renderer {
     return best;
   }
 
-  // st: { thp, al, zt (stylus height above the disc), zoom, az, el, motor, rpm,
-  //       vu (0..1), pulse (0..1), power }
+  // st: { thp, al, zt (stylus height above the disc), ze + xi (how far the tip is pushed up / sideways in the cartridge),
+  //       zoom, az, el, motor, rpm, vu (0..1), warm (0..1, the lamps coming on),
+  //       fire ([x, y, z, brightness]), grain (seed, changes when the grain should), bare }
   draw(st) {
     const gl = this.gl, c = this.canvas, m = this.m, I = G.ident(), info = this.info, ecc = info ? info.ecc : [0, 0];
     const dpr = Math.min(2, window.devicePixelRatio || 1), w = Math.round(c.clientWidth * dpr), h = Math.round(c.clientHeight * dpr);
     if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
-    const cam = this.camera(st);
+    const cam = this.camera(st), rt = this.target(w, h);
     const spin = G.Rz(-st.thp), discM = G.chain(spin, G.T(ecc[0], ecc[1], 0));
-    const arm = G.chain(G.T(PIVOT_X, PIVOT_Y, PIVOT_H), G.Rz(st.al), G.Ry(-Math.asin(Math.max(-0.2, Math.min(0.2, st.zt / ARM_LE)))));
+    // the arm carries the cartridge body; the tip rides ze higher than that, bending the cantilever up
+    const ze = st.ze || 0, arm = G.chain(G.T(PIVOT_X, PIVOT_Y, PIVOT_H), G.Rz(st.al), G.Ry(-Math.asin(Math.max(-0.2, Math.min(0.2, (st.zt - ze) / ARM_LE)))));
     const head = G.chain(arm, G.T(ARM_LE, 0, 0), G.Rz(-ARM_BETA));
+    const bend = (v) => Math.max(-0.25, Math.min(0.25, v / CANT_L));
+    const cant = G.chain(head, G.T(...CANT), G.Ry(-bend(ze)), G.Rz(bend(st.xi || 0)), G.T(-CANT[0], -CANT[1], -CANT[2]));
+    const lit = st.warm;
     const lensM = G.chain(G.T(STROBE[0] + 0.7026 * 0.0185, STROBE[1] + 0.7115 * 0.0185, 0), G.Rz(0.7917));
     const on = st.motor ? 1 : 0, r33 = st.rpm < 40 || st.rpm > 70, r45 = st.rpm > 40, off = [0, 0, 0];
     const glow = (k, col = AMBER) => col.map((v) => v * 2.2 * k);
     const needleM = G.chain(G.T(VU_PIVOT[0], VU_PIVOT[1], DECK_Z + 0.0032), G.Rz(VU_SWING - 2 * VU_SWING * (st.vu || 0)));
     // [mesh, model, albedo, roughness, metalness, mode, emissive]
     const items = [
-      [m.floor, I, [0.016, 0.015, 0.016], 0.55, 0, 5, off], [m.feet, I, BLACK, 0.8, 0, 0, off],
+      [m.floor, I, [0.007, 0.0068, 0.0066], 0.5, 0, 5, off], [m.feet, I, BLACK, 0.8, 0, 0, off],
       [m.body, I, BLACK, 0.62, 0, 0, off], [m.plate, I, [0.045, 0.047, 0.052], 0.46, 0.75, 2, off],
       [m.platter, spin, [0.075, 0.075, 0.08], 0.36, 1, 3, off], [m.mat, spin, [0.010, 0.010, 0.010], 0.9, 0, 0, off],
       [m.spindle, I, CHROME, 0.14, 1, 1, off],
       [m.strobe, I, [0.02, 0.02, 0.022], 0.4, 0.5, 0, off], [m.lens, lensM, [0.15, 0.01, 0.01], 0.3, 0, 0, [2.4 * on, 0.16 * on, 0.05 * on]],
       [m.buttons, I, [0.028, 0.028, 0.030], 0.42, 0.3, 0, off], [m.slot, I, [0.004, 0.004, 0.004], 0.25, 0, 0, off],
-      [m.ledStart, I, [0.05, 0.03, 0.01], 0.3, 0, 0, glow(on)], [m.led33, I, [0.05, 0.03, 0.01], 0.3, 0, 0, glow(r33 ? 1 : 0)],
-      [m.led45, I, [0.05, 0.03, 0.01], 0.3, 0, 0, glow(r45 ? 1 : 0)], [m.ledPitch, I, [0.01, 0.05, 0.02], 0.3, 0, 0, glow(1, [0.2, 1.0, 0.35])],
+      [m.ledStart, I, [0.05, 0.03, 0.01], 0.3, 0, 0, glow(on)], [m.led33, I, [0.05, 0.03, 0.01], 0.3, 0, 0, glow(r33 ? lit : 0)],
+      [m.led45, I, [0.05, 0.03, 0.01], 0.3, 0, 0, glow(r45 ? lit : 0)], [m.ledPitch, I, [0.01, 0.05, 0.02], 0.3, 0, 0, glow(lit, [0.2, 1.0, 0.35])],
       [m.tower, I, [0.020, 0.020, 0.022], 0.38, 0.6, 0, off], [m.towerCap, I, CHROME, 0.16, 1, 0, off],
       [m.tube, arm, [0.30, 0.30, 0.32], 0.16, 1, 0, off], [m.weight, arm, [0.022, 0.022, 0.024], 0.42, 0.7, 0, off], [m.dial, arm, CHROME, 0.28, 1, 0, off],
-      [m.collar, head, CHROME, 0.2, 1, 0, off], [m.shell, head, [0.014, 0.014, 0.015], 0.4, 0.2, 0, off], [m.holder, head, [0.80, 0.36, 0.05], 0.42, 0, 0, off],
+      [m.collar, head, CHROME, 0.2, 1, 0, off], [m.cantilever, cant, [0.55, 0.55, 0.58], 0.3, 1, 0, off], [m.shell, head, [0.014, 0.014, 0.015], 0.4, 0.2, 0, off], [m.holder, head, [0.80, 0.36, 0.05], 0.42, 0, 0, off],
     ];
 
-    items.push([m.vuBezel, I, [0.018, 0.018, 0.019], 0.4, 0.4, 0, off], [m.vuFace, I, [0.62, 0.5, 0.32], 0.55, 0, 6, glow(st.power ? 0.16 : 0, [1.0, 0.62, 0.26])],
+    items.push([m.vuBezel, I, [0.018, 0.018, 0.019], 0.4, 0.4, 0, off], [m.vuFace, I, [0.62, 0.5, 0.32], 0.55, 0, 6, glow(0.16 * lit * lit, [1.0, 0.62 * (0.5 + 0.5 * lit), 0.26 * lit])],   // a filament: redder while it is still coming on
       [m.needle, needleM, [0.012, 0.010, 0.009], 0.4, 0, 0, off]);
 
     if (info) items.push([m.edge, discM, [0.008, 0.008, 0.008], 0.22, 0, 0, off]);
@@ -200,13 +243,13 @@ export class Renderer {
     gl.disable(gl.POLYGON_OFFSET_FILL);
 
     // 2. beauty pass
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, w, h);
-    if (st.bare) gl.clearColor(0, 0, 0, 1); else gl.clearColor(0.004, 0.004, 0.005, 1);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, rt.scene); gl.viewport(0, 0, w, h);
+    if (st.bare) gl.clearColor(0, 0, 0, 0); else gl.clearColor(0.004, 0.004, 0.005, 0);   // alpha is the bloom (shaders.js glow)
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, this.tex.shadow);
     const common = (u) => {
       gl.uniformMatrix4fv(u.uVP, false, cam.vp); gl.uniformMatrix4fv(u.uLVP, false, this.lvp); gl.uniform3fv(u.uEye, cam.eye);
-      gl.uniform1i(u.uShadow, 3); gl.uniform4f(u.uLamp, LAMP[0], LAMP[1], LAMP[2], on); gl.uniform1f(u.uPulse, st.pulse || 0);
+      gl.uniform1i(u.uShadow, 3); gl.uniform4f(u.uLamp, LAMP[0], LAMP[1], LAMP[2], on); gl.uniform4fv(u.uFire, st.fire);
     };
     let u = this.std.u;
     gl.useProgram(this.std.p); common(u); gl.uniform2f(u.uPivot, PIVOT_X, PIVOT_Y); gl.uniform4f(u.uVu, ...VU);
@@ -217,6 +260,29 @@ export class Renderer {
     }
 
     if (info) this.drawDisc(info, discM, common);
+    this.post(rt, st);
+  }
+
+  // resolve the scene, blur what blooms at quarter size, then lay bloom and grain over the picture
+  post(rt, st) {
+    const gl = this.gl, [a, b] = rt.bloom;
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, rt.scene); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, rt.flat);
+    gl.blitFramebuffer(0, 0, rt.w, rt.h, 0, 0, rt.w, rt.h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    gl.disable(gl.DEPTH_TEST); gl.bindVertexArray(null); gl.activeTexture(gl.TEXTURE0);
+    const pass = (prog, to, from, sx, sy) => {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, to.fbo); gl.viewport(0, 0, to.w, to.h);
+      gl.useProgram(prog.p); gl.bindTexture(gl.TEXTURE_2D, from); gl.uniform1i(prog.u.uTex, 0); gl.uniform2f(prog.u.uStep, sx, sy);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    };
+    pass(this.bright, a, rt.tex, 1 / rt.w, 1 / rt.h);
+    for (const k of [1, 2]) { pass(this.blur, b, a.tex, k / a.w, 0); pass(this.blur, a, b.tex, 0, k / a.h); }   // a tight glow, then a wide one
+    const u = this.final.u, dpr = Math.min(2, window.devicePixelRatio || 1), seed = st.grain;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, rt.w, rt.h);
+    gl.useProgram(this.final.p); gl.bindTexture(gl.TEXTURE_2D, rt.tex); gl.uniform1i(u.uTex, 0);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, a.tex); gl.uniform1i(u.uBloom, 1);
+    gl.uniform1f(u.uBloomK, BLOOM); gl.uniform4f(u.uGrain, seed * 0.618 % 1 * 97, seed * 0.414 % 1 * 61, st.bare ? 0 : GRAIN, dpr);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.enable(gl.DEPTH_TEST);
   }
 
   drawDisc(info, discM, common) {

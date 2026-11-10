@@ -4,6 +4,7 @@ import { DeckShell } from "@/components/deck-shell"
 
 const ranges = [
   { section: "player", id: "p-volume", label: "Volume", min: 0, max: 1, step: 0.01, value: 1 },
+  { section: "player", id: "p-room", label: "Room", min: 0, max: 1, step: 0.01, value: 0.35 },
   { section: "cartridge", id: "p-vtf", label: "Tracking g", min: 0.2, max: 4, step: 0.05, value: 1.8 },
   { section: "cartridge", id: "p-antiskate", label: "Anti-skate", min: 0, max: 4, step: 0.05, value: 1.8 },
   { section: "cartridge", id: "p-hum", label: "Mains hum", min: 0, max: 3, step: 0.05, value: 0 },
