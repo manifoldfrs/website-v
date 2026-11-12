@@ -9,8 +9,8 @@ const ranges = [
   { section: "cartridge", id: "p-antiskate", label: "Anti-skate", min: 0, max: 4, step: 0.05, value: 1.8 },
   { section: "cartridge", id: "p-hum", label: "Mains hum", min: 0, max: 3, step: 0.05, value: 0 },
   { section: "pressing", id: "c-noise", label: "Surface", min: 0, max: 4, step: 0.05, value: 1 },
-  { section: "pressing", id: "c-dust", label: "Dust", min: 0, max: 3, step: 0.05, value: 0.25 },
-  { section: "pressing", id: "c-scratches", label: "Scratches", min: 0, max: 2, step: 0.05, value: 0.2 },
+  { section: "pressing", id: "c-dust", label: "Dust", min: 0, max: 3, step: 0.05, value: 0.1 },
+  { section: "pressing", id: "c-scratches", label: "Scratches", min: 0, max: 2, step: 0.05, value: 0 },
   { section: "pressing", id: "c-warp", label: "Warp mm", min: 0, max: 2, step: 0.05, value: 0.3 },
   { section: "pressing", id: "c-offCenter", label: "Off-centre", min: 0, max: 1.5, step: 0.05, value: 0.15 },
 ] as const

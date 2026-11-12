@@ -6,8 +6,8 @@ import { grooveRadius, thetaForRadius, R_DISC, R_LOCK } from './geometry.js';
 
 export const DEFAULT_CONDITION = {
   noise: 1,        // wall roughness (1 = good pressing)
-  dust: 0.25,      // particles sitting in the groove
-  scratches: 0.2,  // gouges across the grooves
+  dust: 0.1,       // particles sitting in the groove
+  scratches: 0,    // gouges across the grooves
   warp: 0.3,       // mm, peak height at the rim
   offCenter: 0.15, // mm, spindle hole eccentricity
   echo: 1,         // lacquer spring-back print-through from the neighbouring groove
