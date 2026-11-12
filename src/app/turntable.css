@@ -113,6 +113,9 @@ html:not(.turntable-on) .deck:not([data-home]) #toggles { display: none; }
 @media (max-width: 640px) {
   #toggles { top: calc(12px + env(safe-area-inset-top)); }
   #toggles #t-records { max-width: calc(100vw - 120px); }
+  /* leave room for the [about] [writing] nav in the top-left corner */
+  .deck[data-home] #toggles #t-records { max-width: calc(100vw - 262px); }
+  .deck[data-home] #now-time { display: none; }
   #credit { right: 18px; gap: 14px; bottom: calc(12px + env(safe-area-inset-bottom)); }
   #foot { left: 18px; bottom: calc(12px + env(safe-area-inset-bottom)); }
   .deck-nav { top: calc(16px + env(safe-area-inset-top)); left: 18px; gap: 21px; }
