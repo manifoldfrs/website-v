@@ -81,24 +81,70 @@ function arcText(k, text, r, gap) {
   });
 }
 
-// A picture label: the record's cover art printed edge to edge. The art is shrunk a little so text near the
-// cover's corners stays on the label, and the margin is filled with the colour of the art's corner.
-const ART_SCALE = 0.9, ART_DARKEN = 0.55;
+// Wears an ink layer the way a pressing ages: uneven density, pinholes, scuffs, scratches around the hole.
+function wear(k, R) {
+  k.globalCompositeOperation = 'destination-out';
+  k.imageSmoothingEnabled = true; k.imageSmoothingQuality = 'high';
+  k.globalAlpha = 0.30; stretch(k, noise(46, R, true));            // uneven ink density
+  for (let i = 0; i < 7000; i++) {                                 // pinholes where the ink missed the grain
+    const s = 0.6 + R() * 1.5; k.globalAlpha = 0.1 + 0.45 * R(); k.fillRect(R() * S, R() * S, s, s);
+  }
+  for (let i = 0; i < 44; i++) {                                   // hairline scuffs, following the rotation
+    const a = R() * TAU; k.globalAlpha = 0.2 + 0.45 * R(); k.lineWidth = 0.6 + R() * 1.2;
+    k.beginPath(); k.arc(C, C, 60 + R() * 425, a, a + 0.05 + R() * 0.4); k.stroke();
+  }
+  k.lineCap = 'round';
+  for (let i = 0; i < 16; i++) {                                   // spindle trails: a little ink scratched off around the hole
+    const a = R() * TAU, r0 = 38 + R() * 20, r1 = r0 + 8 + R() * 34, bend = (R() - 0.5) * 0.9;
+    k.globalAlpha = 0.12 + 0.3 * R(); k.lineWidth = 0.6 + R() * 0.9;
+    k.beginPath(); k.moveTo(C + r0 * Math.cos(a), C + r0 * Math.sin(a)); k.lineTo(C + r1 * Math.cos(a + bend), C + r1 * Math.sin(a + bend)); k.stroke();
+  }
+  k.globalCompositeOperation = 'source-over'; k.globalAlpha = 1;
+}
+
+// A picture label: the cover art printed as ink on the same worn paper, inside the inner ring, so the
+// stock's grain shows through it. The art is darkened as far as INK is, so its lightest tones land as the same cream.
+const ART_R = 432, ART_DARKEN = 0.47, ART_GRAIN = 0.55;
 
 function pictureLabel(art) {
-  const c = sheet(), x = c.getContext('2d'), s = S * ART_SCALE;
-  const probe = document.createElement('canvas').getContext('2d');
-  probe.drawImage(art, 0, 0, 1, 1, 0, 0, 1, 1);
-  const [r, g, b] = probe.getImageData(0, 0, 1, 1).data;
-  x.fillStyle = `rgb(${r},${g},${b})`; x.fillRect(0, 0, S, S);
-  x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
-  x.drawImage(art, C - s / 2, C - s / 2, s, s);
-  // the same trick as paper(): the disc shader squares the texel under a bright key light
-  x.globalCompositeOperation = 'multiply'; x.fillStyle = `rgb(${ART_DARKEN * 255},${ART_DARKEN * 255},${ART_DARKEN * 255})`; x.fillRect(0, 0, S, S);
-  x.globalCompositeOperation = 'source-over';
-  x.lineWidth = 3.5; x.strokeStyle = 'rgba(0,0,0,.30)'; x.beginPath(); x.arc(C, C, 158, 0, TAU); x.stroke();   // pressing ring
+  stock ||= paper();
+  const c = sheet(), x = c.getContext('2d'), R = rng(7);
+  x.drawImage(stock, 0, 0);
 
+  const layer = sheet(), k = layer.getContext('2d');
+  k.save(); k.beginPath(); k.arc(C, C, ART_R, 0, TAU); k.clip();
+  k.imageSmoothingEnabled = true; k.imageSmoothingQuality = 'high';
+  k.drawImage(art, C - ART_R, C - ART_R, 2 * ART_R, 2 * ART_R);
+  k.restore();
+  k.globalCompositeOperation = 'multiply'; k.fillStyle = `rgb(${ART_DARKEN * 255},${ART_DARKEN * 255},${ART_DARKEN * 255})`; k.fillRect(0, 0, S, S);
+  k.globalCompositeOperation = 'destination-in'; k.beginPath(); k.arc(C, C, ART_R, 0, TAU); k.fill();
+  wear(k, R);
+  k.globalCompositeOperation = 'soft-light'; k.globalAlpha = ART_GRAIN; k.drawImage(stock, 0, 0);
+  k.globalCompositeOperation = 'source-over'; k.globalAlpha = 1;
+  x.globalAlpha = 0.95; x.drawImage(layer, 0, 0);
+
+  rimInk(x, R);
+  pressingRing(x);
   return c;
+}
+
+// the outer rings and the line along the rim, in cream ink
+function rimInk(x, R) {
+  const layer = sheet(), k = layer.getContext('2d');
+  k.fillStyle = k.strokeStyle = INK; k.textAlign = 'center'; k.textBaseline = 'middle';
+  k.lineWidth = 3; k.beginPath(); k.arc(C, C, 489, 0, TAU); k.stroke();
+  k.lineWidth = 1.2; k.beginPath(); k.arc(C, C, 440, 0, TAU); k.stroke();
+  k.font = `600 15px ${SANS}`;
+  arcText(k, 'NOT A SOUND EFFECT  ·  CUT INTO A GROOVE  ·  READ BACK BY A SIMULATED STYLUS', 464, 5);
+  wear(k, R);
+  x.globalAlpha = 0.95; x.drawImage(layer, 0, 0); x.globalAlpha = 1;
+}
+
+// the dent the press leaves around the spindle, through paper and ink alike
+function pressingRing(x) {
+  x.globalAlpha = 1;
+  x.lineWidth = 3.5; x.strokeStyle = 'rgba(0,0,0,.30)'; x.beginPath(); x.arc(C, C, 158, 0, TAU); x.stroke();
+  x.lineWidth = 2; x.strokeStyle = 'rgba(255,255,255,.03)'; x.beginPath(); x.arc(C, C, 162, 0, TAU); x.stroke();
 }
 
 export function drawLabel(titles = [], art = null) {
@@ -128,26 +174,8 @@ export function drawLabel(titles = [], art = null) {
   k.font = `600 15px ${SANS}`;
   arcText(k, 'NOT A SOUND EFFECT  ·  CUT INTO A GROOVE  ·  READ BACK BY A SIMULATED STYLUS', 464, 5);
 
-  k.globalCompositeOperation = 'destination-out';
-  k.imageSmoothingEnabled = true; k.imageSmoothingQuality = 'high';
-  k.globalAlpha = 0.30; stretch(k, noise(46, R, true));            // uneven ink density
-  for (let i = 0; i < 7000; i++) {                                 // pinholes where the ink missed the grain
-    const s = 0.6 + R() * 1.5; k.globalAlpha = 0.1 + 0.45 * R(); k.fillRect(R() * S, R() * S, s, s);
-  }
-  for (let i = 0; i < 44; i++) {                                   // hairline scuffs, following the rotation
-    const a = R() * TAU; k.globalAlpha = 0.2 + 0.45 * R(); k.lineWidth = 0.6 + R() * 1.2;
-    k.beginPath(); k.arc(C, C, 60 + R() * 425, a, a + 0.05 + R() * 0.4); k.stroke();
-  }
-  k.lineCap = 'round';
-  for (let i = 0; i < 16; i++) {                                   // spindle trails: a little ink scratched off around the hole
-    const a = R() * TAU, r0 = 38 + R() * 20, r1 = r0 + 8 + R() * 34, bend = (R() - 0.5) * 0.9;
-    k.globalAlpha = 0.12 + 0.3 * R(); k.lineWidth = 0.6 + R() * 0.9;
-    k.beginPath(); k.moveTo(C + r0 * Math.cos(a), C + r0 * Math.sin(a)); k.lineTo(C + r1 * Math.cos(a + bend), C + r1 * Math.sin(a + bend)); k.stroke();
-  }
+  wear(k, R);
   x.globalAlpha = 0.95; x.drawImage(layer, 0, 0);
-  // pressing ring: the dent the press leaves around the spindle, through paper and ink alike
-  x.globalAlpha = 1;
-  x.lineWidth = 3.5; x.strokeStyle = 'rgba(0,0,0,.30)'; x.beginPath(); x.arc(C, C, 158, 0, TAU); x.stroke();
-  x.lineWidth = 2; x.strokeStyle = 'rgba(255,255,255,.03)'; x.beginPath(); x.arc(C, C, 162, 0, TAU); x.stroke();
+  pressingRing(x);
   return c;
 }
