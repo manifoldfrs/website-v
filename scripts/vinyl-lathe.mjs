@@ -17,7 +17,7 @@ import { cut } from "../public/vinyl/src/cut.js"
 import { press, makeVis, DEFAULT_CONDITION } from "../public/vinyl/src/press.js"
 
 const assets = fileURLToPath(new URL("../public/vinyl/assets/", import.meta.url))
-const FS = 48000, SEED = 7, STEP = 0.5e-9, HOUSE_CUT = { maxExtra: 150e-6 }
+const FS = 48000, SEED = 7, STEP = 0.5e-9, HOUSE_CUT = { maxExtra: 150e-6, cutPeak: 0.1 }
 const ffmpeg = spawnSync("ffmpeg", ["-version"]).status === 0
 const t0 = Date.now(), log = (...a) => console.log(`[lathe +${((Date.now() - t0) / 1000).toFixed(1)}s]`, ...a)
 
