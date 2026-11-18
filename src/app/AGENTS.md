@@ -5,11 +5,12 @@
 - Server components by default with client-only islands for interactivity.
 
 ## Setup & Run
-- `bun run dev`
-- `bun run build`
-- `bun run start`
-- `bun run lint`
-- `bun x tsc --noEmit`
+- `pnpm run dev`
+- `pnpm run build`
+- `pnpm run start`
+- `pnpm run lint`
+- `pnpm run typecheck`
+- `pnpm test`
 
 ## Patterns & Conventions
 - ✅ DO: Keep route files as `page.tsx` inside segment folders, e.g., `src/app/about/page.tsx`.
@@ -47,4 +48,4 @@
 - Client components must declare `"use client"` before hooks.
 
 ## Pre-PR Checks
-- `bun run lint && bun x tsc --noEmit && bun run build`
+- `pnpm run lint && pnpm run typecheck && pnpm test && pnpm run build`

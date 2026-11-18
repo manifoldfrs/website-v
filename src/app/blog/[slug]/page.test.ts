@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url"
 const routeModule = fileURLToPath(new URL("./page.tsx", import.meta.url))
 
 function runStaticParams(directory: string) {
-  return spawnSync(process.execPath, ["--eval", `
+  return spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", `
     process.chdir(${JSON.stringify(directory)})
     const { generateStaticParams } = await import(${JSON.stringify(routeModule)})
     process.stdout.write(JSON.stringify(await generateStaticParams()))

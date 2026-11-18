@@ -1,5 +1,7 @@
 # Music player + visualizer scripts
 
+Run these commands from the repository root with Node.js 24. The audio scripts require `ffmpeg`.
+
 ## Playlist track list — `fetch-tracks.ts`
 
 Spotify returns 403 on playlist items for new apps (even with a user token), so the
@@ -8,7 +10,7 @@ track list is read from Spotify's **public embed page** and committed as static 
 playlist:
 
 ```bash
-bun scripts/fetch-tracks.ts
+node scripts/fetch-tracks.ts
 ```
 
 It writes `tracks.json`; the dev server hot-reloads it. (The parser depends on
@@ -51,7 +53,7 @@ track elsewhere (purchased MP3, CD rip), use that file and skip recording.
 ## 2. Analyze
 
 ```bash
-bun scripts/analyze-track.ts public/_raw/song.wav <spotify-track-id-or-url>
+node scripts/analyze-track.ts public/_raw/song.wav <spotify-track-id-or-url>
 ```
 
 Writes `public/waveforms/<trackId>.json` (32 bins, 30 fps, ~50–100 KB). Leading
