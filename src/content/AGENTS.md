@@ -5,13 +5,13 @@
 - Parsed by the Effect blog service in `src/lib/blog/posts-service.ts`.
 
 ## Setup & Run
-- `bun run dev`
-- `bun run build`
-- `bun run lint`
+- `pnpm run dev`
+- `pnpm run build`
+- `pnpm run lint`
 
 ## Patterns & Conventions
 - ✅ DO: Keep posts under `src/content/posts/` like `src/content/posts/interlude.md`.
-- ✅ DO: Create posts with `bun run new-post "Title" [slug]`; it writes `slug.md` with today's date.
+- ✅ DO: Create posts with `pnpm run new-post "Title" [slug]`; it writes `slug.md` with today's date.
 - ✅ DO: Use filename format `slug.md`; the filename is the URL slug (see `src/content/posts/neo-sparta.md`).
 - ✅ DO: Include frontmatter fields `layout`, `title`, `date` (`YYYY-MM-DD`), `categories` (see `src/content/posts/interlude.md`).
 - ✅ DO: Structure long posts with headings like `src/content/posts/neo-sparta.md`.
@@ -39,4 +39,4 @@
 - Posts are ordered by frontmatter `date`; the filename is only the slug.
 
 ## Pre-PR Checks
-- `bun run lint && bun run build`
+- `pnpm run lint && pnpm run build`

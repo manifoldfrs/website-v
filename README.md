@@ -14,22 +14,24 @@ Faris Habib's personal website, built with Next.js 16. The homepage is a record 
 ## Changing the record
 
 ```bash
-bun scripts/vinyl-lathe.mjs "path/to/song.mp3"
+node scripts/vinyl-lathe.mjs "path/to/song.mp3"
 ```
 
 This needs `ffmpeg`. It cuts the song into a groove and writes `public/vinyl/assets/`; then set the title in `public/vinyl/src/records.js`. Keep each `record.flac` under 25 MiB (about four minutes of music).
 
 ## Development
 
+Use Node.js 24 and pnpm 12.21.0. Run these commands from the repository root:
+
 ```bash
-bun install
-bun run dev
+pnpm install --frozen-lockfile
+pnpm run dev
 ```
 
 ## Writing a post
 
 ```bash
-bun run new-post "Why's everyone getting hacked?" hackermans
+pnpm run new-post "Why's everyone getting hacked?" hackermans
 ```
 
 This creates `src/content/posts/hackermans.md` with today's date in its frontmatter. The slug is optional and defaults to one derived from the title. The filename becomes the post's URL (`/blog/hackermans`), so don't rename a post after it's published. Posts are ordered by their `date` (`YYYY-MM-DD`), which is shown as written, with no time or timezone.
@@ -37,11 +39,13 @@ This creates `src/content/posts/hackermans.md` with today's date in its frontmat
 ## Validation
 
 ```bash
-bun run lint
-bun x tsc --noEmit
-bun test src/components/site.test.tsx
-bun run build
+pnpm run lint
+pnpm run typecheck
+pnpm test
+pnpm run build
 ```
+
+`pnpm run typecheck` uses `tsc-ts`. `pnpm run build` also runs Next.js's TypeScript check and writes the static site to `out/`. Use `pnpm run start` to preview that output with Wrangler.
 
 ## Structure
 

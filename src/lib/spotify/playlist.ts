@@ -6,7 +6,7 @@
  * time with ISR caching, so new songs added to the playlist show up automatically
  * (within the revalidate window). The committed src/lib/spotify/tracks.json is a
  * fallback used if the live fetch ever fails (e.g. Spotify changes the embed markup);
- * refresh it with `bun scripts/fetch-tracks.ts`.
+ * refresh it with `node scripts/fetch-tracks.ts`.
  */
 
 import fallbackData from "./tracks.json"

@@ -1,9 +1,9 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 /**
  * Create a new blog post stamped with today's date.
  *
- * Run:  bun run new-post "Why's everyone getting hacked?"            -> whys-everyone-getting-hacked.md
- *       bun run new-post "Why's everyone getting hacked?" hackermans -> hackermans.md
+ * Run:  pnpm run new-post "Why's everyone getting hacked?"            -> whys-everyone-getting-hacked.md
+ *       pnpm run new-post "Why's everyone getting hacked?" hackermans -> hackermans.md
  */
 
 import { existsSync, writeFileSync } from "node:fs"
@@ -11,7 +11,7 @@ import { join } from "node:path"
 
 const [title, slugArg] = process.argv.slice(2)
 if (!title) {
-  console.error('✗ Usage: bun run new-post "Post title" [slug]')
+  console.error('✗ Usage: pnpm run new-post "Post title" [slug]')
   process.exit(1)
 }
 

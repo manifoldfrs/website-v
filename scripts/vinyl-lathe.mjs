@@ -1,10 +1,10 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 /**
  * Cuts audio files into the record on the homepage turntable (public/vinyl/assets/).
  * Remixed from rauchg/vinyl's lathe.mjs (MIT, see public/vinyl/LICENSE). Needs ffmpeg.
  *
  * Usage:
- *   bun scripts/vinyl-lathe.mjs <audio-file> [more files...]
+ *   node scripts/vinyl-lathe.mjs <audio-file> [more files...]
  *
  * Each file becomes one track on the same side, in the order given.
  * After cutting, update the title in public/vinyl/src/records.js.
@@ -112,7 +112,7 @@ function build({ id, out, load, cutOpts, keepSource }) {
 const files = process.argv.slice(2)
 
 if (!files.length) {
-  console.error("Usage: bun scripts/vinyl-lathe.mjs <audio-file> [more files...]")
+  console.error("Usage: node scripts/vinyl-lathe.mjs <audio-file> [more files...]")
   process.exit(1)
 }
 

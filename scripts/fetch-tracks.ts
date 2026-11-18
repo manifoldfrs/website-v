@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 /**
  * Fetch the playlist's track list from Spotify's public embed page and write it to
  * src/lib/spotify/tracks.json (committed static data the site reads at runtime).
@@ -9,7 +9,7 @@
  * the playlist. (This depends on Spotify's embed markup; if it ever breaks, the
  * script will say so — ping me and I'll adjust the parser.)
  *
- * Run:  bun scripts/fetch-tracks.ts
+ * Run:  node scripts/fetch-tracks.ts
  */
 
 import { mkdirSync, writeFileSync } from "node:fs"

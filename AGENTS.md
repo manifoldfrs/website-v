@@ -17,25 +17,25 @@
 - If instructions conflict, follow the most specific file in the target directory.
 
 ## Tooling and Setup
-- Install dependencies: `bun install`
-- Run local dev server: `bun run dev`
-- Build production bundle: `bun run build`
-- Start production server: `bun run start`
-- Lint project: `bun run lint`
-- New blog post: `bun run new-post "Title" [slug]`
-- Typecheck: `bun x tsc --noEmit`
+- Use Node.js 24 and pnpm 12.21.0.
+- Install dependencies: `pnpm install --frozen-lockfile`
+- Run local dev server: `pnpm run dev`
+- Build production bundle: `pnpm run build`
+- Preview production output with Wrangler: `pnpm run start`
+- Lint project: `pnpm run lint`
+- New blog post: `pnpm run new-post "Title" [slug]`
+- Typecheck: `pnpm run typecheck`
 
 ## Primary Validation Commands
-- No dedicated test script is defined in this repository.
-- Replace "tests" with focused verification from lint/typecheck/build.
-- Fast path for local edits: `bun run lint`.
-- Full path for PRs: `bun run lint && bun x tsc --noEmit && bun run build`.
+- Run both Node test files: `pnpm test`.
+- Fast path for local edits: `pnpm run lint`.
+- Full path for PRs: `pnpm run lint && pnpm run typecheck && pnpm test && pnpm run build`.
 - For targeted checks when investigating one file:
-  - `bun run lint src/app/page.tsx`
-  - `bun run lint src/components/hero.tsx`
-  - `bun x tsc --noEmit --pretty false`
+  - `pnpm exec eslint src/app/page.tsx`
+  - `pnpm exec eslint src/components/site-navigation.tsx`
+  - `pnpm run typecheck --pretty false`
 - For content changes only, run:
-  - `bun run build` (ensures blog route generation and markdown pipelines work)
+  - `pnpm run build` (ensures blog route generation and markdown pipelines work)
 
 ## Core Conventions
 - Use TypeScript strict everywhere; avoid `any` unless documented with a short reason and TODO.
@@ -72,7 +72,7 @@
 - Keep thrown error classes narrow and intentional.
 
 ## Content and Markdown Rules
-- Posts must live under `src/content/posts` as `slug.md`; create them with `bun run new-post "Title" [slug]`.
+- Posts must live under `src/content/posts` as `slug.md`; create them with `pnpm run new-post "Title" [slug]`.
 - Keep required frontmatter fields present and valid (at least `layout`, `title`, `date` as `YYYY-MM-DD`, `categories`).
 - Maintain markdown structure with clear heading hierarchy.
 - Reference assets from `public/images` using site-root relative paths (no hardcoded external-only shortcuts).
@@ -84,7 +84,7 @@
 - Keep 3D/visual-heavy modules isolated and loaded client-only when necessary.
 - For motion, keep transitions purposeful and avoid excessive autoplay loops that increase CPU on first paint.
 - Avoid placing heavy WebGL/Canvas code in multiple files; centralize in the established component.
-- The homepage turntable is remixed from rauchg/vinyl (MIT): plain ES modules in `public/vinyl/src`, outside the bundler. `src/components/turntable.tsx` renders the markup `public/vinyl/src/main.js` finds by id, once, in the root layout, so the music keeps playing across client-side navigation; on other pages only the now-playing pill shows. Internal links must stay client-side (`TransitionLink`), or a full page load stops the music. Keep `public/vinyl/LICENSE`. Cut a new record with `bun scripts/vinyl-lathe.mjs <audio-file>`.
+- The homepage turntable is remixed from rauchg/vinyl (MIT): plain ES modules in `public/vinyl/src`, outside the bundler. `src/components/turntable.tsx` renders the markup `public/vinyl/src/main.js` finds by id, once, in the root layout, so the music keeps playing across client-side navigation; on other pages only the now-playing pill shows. Internal links must stay client-side (`TransitionLink`), or a full page load stops the music. Keep `public/vinyl/LICENSE`. Cut a new record with `node scripts/vinyl-lathe.mjs <audio-file>`.
 
 ## Security and Privacy
 - Secrets belong in `.env.local` only.
@@ -134,9 +134,10 @@
 - If such files appear later, treat them as highest priority under their own scope.
 
 ## Definition of Done
-- `bun run lint` passes.
-- `bun x tsc --noEmit` passes.
-- `bun run build` passes.
+- `pnpm run lint` passes.
+- `pnpm run typecheck` passes.
+- `pnpm test` passes.
+- `pnpm run build` passes.
 - Scope-specific AGENTS instructions are followed.
 - Public content updates are visible and posts remain valid.
 - No secrets or generated credentials committed.

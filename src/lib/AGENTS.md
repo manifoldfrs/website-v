@@ -5,11 +5,12 @@
 - Converts markdown posts in `src/content/posts` to HTML for routes.
 
 ## Setup & Run
-- `bun run dev`
-- `bun run build`
-- `bun run start`
-- `bun run lint`
-- `bun x tsc --noEmit`
+- `pnpm run dev`
+- `pnpm run build`
+- `pnpm run start`
+- `pnpm run lint`
+- `pnpm run typecheck`
+- `pnpm test`
 
 ## Patterns & Conventions
 - ✅ DO: Import blog APIs from `src/lib/blog/index.ts` (see `src/app/page.tsx`).
@@ -43,4 +44,4 @@
 - Use `Effect.orElseSucceed` fallback like `src/app/page.tsx` when running effects in pages.
 
 ## Pre-PR Checks
-- `bun run lint && bun x tsc --noEmit && bun run build`
+- `pnpm run lint && pnpm run typecheck && pnpm test && pnpm run build`

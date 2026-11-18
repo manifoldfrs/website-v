@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 /**
  * Offline FFT analysis for the music visualizer.
  *
@@ -7,15 +7,16 @@
  * and renders synced to Spotify's reported playback position.
  *
  * Usage:
- *   bun scripts/analyze-track.ts <audio-file> <spotify-track-id|url|uri>
+ *   node scripts/analyze-track.ts <audio-file> <spotify-track-id|url|uri>
  *
  * Example:
- *   bun scripts/analyze-track.ts public/_raw/song.wav 1BxfuPKGuaTgP7aM0Bbdwr
+ *   node scripts/analyze-track.ts public/_raw/song.wav 1BxfuPKGuaTgP7aM0Bbdwr
  *
  * Output: public/waveforms/<trackId>.json  ({ fps, bins, frames: number[][] })
  * The audio file itself is never shipped, only the derived numbers.
  */
 
+import { spawnSync } from "node:child_process"
 import { mkdirSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 
@@ -79,13 +80,16 @@ function fft(re: Float64Array, im: Float64Array) {
 }
 
 function decodePcm(input: string): Float32Array {
-  const proc = Bun.spawnSync(
-    ["ffmpeg", "-v", "error", "-i", input, "-ac", "1", "-ar", String(SAMPLE_RATE), "-f", "f32le", "-"],
-    { stdout: "pipe", stderr: "pipe" },
+  const proc = spawnSync(
+    "ffmpeg",
+    ["-v", "error", "-i", input, "-ac", "1", "-ar", String(SAMPLE_RATE), "-f", "f32le", "-"],
+    { maxBuffer: Infinity },
   )
-  if (proc.exitCode !== 0) {
-    fail(`ffmpeg failed:\n${proc.stderr.toString()}`)
+
+  if (proc.error || proc.status !== 0) {
+    fail(`ffmpeg failed:\n${proc.error?.message ?? proc.stderr.toString()}`)
   }
+
   const buf = proc.stdout
   const samples = new Float32Array(buf.length >> 2)
   // copy bytes into an aligned Float32Array (ffmpeg emits little-endian f32)
@@ -154,16 +158,12 @@ function analyze(samples: Float32Array) {
 // --- main ---
 const [, , inputArg, idArg] = process.argv
 if (!inputArg || !idArg) {
-  fail("Usage: bun scripts/analyze-track.ts <audio-file> <spotify-track-id|url|uri>")
+  fail("Usage: node scripts/analyze-track.ts <audio-file> <spotify-track-id|url|uri>")
 }
 
-let ffmpegOk = false
-try {
-  ffmpegOk = Bun.spawnSync(["ffmpeg", "-version"], { stdout: "pipe", stderr: "pipe" }).exitCode === 0
-} catch {
-  ffmpegOk = false
+if (spawnSync("ffmpeg", ["-version"]).status !== 0) {
+  fail("ffmpeg not found. Install it: brew install ffmpeg")
 }
-if (!ffmpegOk) fail("ffmpeg not found. Install it: brew install ffmpeg")
 
 const trackId = extractTrackId(idArg)
 console.log(`Analyzing ${inputArg} → track ${trackId}`)

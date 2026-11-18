@@ -5,11 +5,12 @@
 - Minimal, document-style layout inspired by mitchellh.com. Mostly server components; client only where interaction requires it.
 
 ## Setup & Run
-- `bun run dev`
-- `bun run build`
-- `bun run start`
-- `bun run lint`
-- `bun x tsc --noEmit`
+- `pnpm run dev`
+- `pnpm run build`
+- `pnpm run start`
+- `pnpm run lint`
+- `pnpm run typecheck`
+- `pnpm test`
 
 ## Design System
 - Theme tokens live in `src/app/globals.css` and match the homepage turntable: near-black background (`#0c0c0d`) under a soft grey radial light, warm off-white text (`#e8e4dd`), warm grays for prose and muted text, and one amber accent (`#ffb454`) for links, focus, and highlights.
@@ -49,4 +50,4 @@
 - Do not set `overflow` on `body`/`html`; it breaks the sidebar's `position: sticky`.
 
 ## Pre-PR Checks
-- `bun run lint && bun x tsc --noEmit && bun run build`
+- `pnpm run lint && pnpm run typecheck && pnpm test && pnpm run build`

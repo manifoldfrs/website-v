@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 /**
  * Post newly published blog posts to X. Run by .github/workflows/post-to-x.yml after a push
  * that adds files under src/content/posts/.
@@ -7,7 +7,7 @@
  * GitHub, so the page can lag the push), then posts "<title> <url>" with OAuth 1.0a user
  * tokens. Those don't expire, unlike OAuth 2.0 user tokens, so they suit CI.
  *
- * Run:  bun scripts/post-to-x.ts src/content/posts/independence.md [...]
+ * Run:  node scripts/post-to-x.ts src/content/posts/independence.md [...]
  * Env:  X_CONSUMER_KEY, X_CONSUMER_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET
  *       DRY_RUN=1 prints the post instead of sending it
  */
@@ -15,8 +15,9 @@
 import { createHmac, randomBytes } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { basename } from "node:path"
+import { setTimeout } from "node:timers/promises"
 import matter from "gray-matter"
-import { deriveSlugFromFilename } from "../src/lib/blog/slug"
+import { deriveSlugFromFilename } from "../src/lib/blog/slug.ts"
 
 const SITE_URL = "https://heyfar.is"
 const POST_ENDPOINT = "https://api.x.com/2/tweets"
@@ -25,7 +26,7 @@ const LIVE_POLL_MS = 15 * 1000
 
 const files = process.argv.slice(2)
 if (files.length === 0) {
-  console.error("✗ Usage: bun scripts/post-to-x.ts <post.md> [...]")
+  console.error("✗ Usage: node scripts/post-to-x.ts <post.md> [...]")
   process.exit(1)
 }
 
@@ -88,7 +89,7 @@ async function waitUntilLive(url: string): Promise<void> {
     const res = await fetch(url, { method: "HEAD", cache: "no-store" })
     if (res.ok) return
     console.log(`… ${url} returned ${res.status}, retrying in ${LIVE_POLL_MS / 1000}s`)
-    await Bun.sleep(LIVE_POLL_MS)
+    await setTimeout(LIVE_POLL_MS)
   }
   throw new Error(`${url} was not live after ${LIVE_TIMEOUT_MS / 60000} minutes`)
 }
