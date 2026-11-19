@@ -3,6 +3,7 @@ import type { ReactNode } from "react"
 import { ViewTransition } from "react"
 import type { Metadata, Viewport } from "next"
 import { Analytics } from "@vercel/analytics/next"
+import { GeistSerifRegular } from "geist/font/serif/regular"
 import { Footer } from "@/components/footer"
 import { SiteNavigation } from "@/components/site-navigation"
 import { Turntable } from "@/components/turntable"
@@ -26,7 +27,7 @@ export const viewport: Viewport = { themeColor: "#0c0c0d" }
 
 export default function RootLayout({ children }: { readonly children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={GeistSerifRegular.variable}>
       <body>
         <a href="#main-content" className="skip-link">Skip to content</a>
         <div className="site-shell">
