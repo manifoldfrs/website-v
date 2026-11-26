@@ -100,6 +100,41 @@ func TestOpponentUnlocksLaserInRoundFour(t *testing.T) {
 	}
 }
 
+func TestRocketBootsUnlockAfterTwoWins(t *testing.T) {
+	for round := 1; round <= 4; round++ {
+		match := newFight(0, round)
+		player, cpu := &match.fighters[0], &match.fighters[1]
+		player.x, cpu.x = 100, 135
+		match.step(punch)
+		match.step(0)
+		if jumping := cpu.action == rocketJump; jumping != (round >= 3) {
+			t.Fatalf("round %d: jumping = %t", round, jumping)
+		}
+	}
+}
+
+func TestRocketJumpDodgesAPunchAndLeavesAnOpening(t *testing.T) {
+	match := newFight(0, 3)
+	player, cpu := &match.fighters[0], &match.fighters[1]
+	player.x, cpu.x = 100, 135
+	for range 10 {
+		match.step(punch)
+	}
+	if cpu.height() < punchReachHeight || cpu.health != 100 {
+		t.Fatalf("CPU did not dodge first punch: height=%d health=%d", cpu.height(), cpu.health)
+	}
+
+	for range 40 {
+		match.step(punch)
+		if cpu.health < 100 {
+			break
+		}
+	}
+	if cpu.height() != 0 || cpu.health != 83 {
+		t.Fatalf("next punch did not connect after landing: height=%d health=%d", cpu.height(), cpu.health)
+	}
+}
+
 func TestLaserWarnsForHalfASecondAndHitsOnce(t *testing.T) {
 	for _, tc := range []struct {
 		name  string

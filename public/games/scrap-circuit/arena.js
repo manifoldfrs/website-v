@@ -30,7 +30,7 @@ const keys = new Map([
   ["KeyK", 8], ["ShiftLeft", 8], ["ShiftRight", 8],
 ])
 
-const readyFrame = Uint8Array.of(70, 100, 0, 186, 100, 0, 0, 0)
+const readyFrame = Uint8Array.of(70, 100, 0, 186, 100, 0, 0, 0, 0, 0)
 const frame = readyFrame.slice()
 const pressedKeys = new Set()
 const pointers = new Map()
@@ -63,6 +63,8 @@ function render() {
       color: panel.dataset.color,
       facesRight: mirrored ? i === 1 : i === 0,
       laserRange: frame[7],
+      lift: i === 1 ? frame[8] : 0,
+      rocketBoots: i === 1 && frame[9] === 1,
     })
   })
 }
@@ -206,10 +208,12 @@ window.addEventListener("keydown", (event) => {
 })
 window.addEventListener("keyup", (event) => pressedKeys.delete(event.code))
 window.addEventListener("blur", releaseInputs)
+document.querySelector(".cabinet").addEventListener("contextmenu", (event) => event.preventDefault())
 
 for (const button of buttons) {
   button.addEventListener("pointerdown", (event) => {
     if (!running || event.button !== 0) return
+    event.preventDefault()
     button.setPointerCapture(event.pointerId)
     pointers.set(event.pointerId, button)
     button.dataset.held = ""

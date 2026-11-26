@@ -13,6 +13,9 @@ body { margin: 0; }
   padding: 10px;
   border: 1px solid #42392c;
   background: #191714;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .scoreboard {
@@ -90,7 +93,6 @@ button {
   font: 700 13px/1 ui-monospace, Menlo, monospace;
   cursor: pointer;
   touch-action: none;
-  user-select: none;
 }
 
 button:focus-visible { outline: 2px solid #ffe1a3; outline-offset: 2px; }

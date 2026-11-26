@@ -10,6 +10,7 @@ const (
 	punch
 	guard
 	laser
+	jump
 )
 
 const (
@@ -21,6 +22,7 @@ const (
 	staggered
 	laserCharging
 	laserFiring
+	rocketJump
 )
 
 const (
@@ -43,6 +45,11 @@ const (
 	laserRecoveryTicks = 27
 	laserCooldownTicks = 180
 	laserDamage        = 24
+	jumpTicks          = 30
+	jumpPeak           = 30
+	jumpLandingTicks   = 14
+	jumpCooldownTicks  = 150
+	punchReachHeight   = 12
 )
 
 type fighter struct {
@@ -58,6 +65,7 @@ type cpuDifficulty struct {
 	attackDelay int
 	damage      int
 	laserRange  int
+	rocketBoots bool
 }
 
 type fight struct {
@@ -66,6 +74,7 @@ type fight struct {
 	result    int
 	cpuWait   int
 	laserWait int
+	jumpWait  int
 	random    *rand.Rand
 }
 
@@ -87,6 +96,7 @@ func newFight(seed int64, round int) fight {
 			attackDelay: 15 - int(10*pressure),
 			damage:      14 + int(11*pressure),
 			laserRange:  beamRange,
+			rocketBoots: round >= 3,
 		},
 		random: rand.New(rand.NewSource(seed)),
 	}
@@ -97,9 +107,10 @@ func (f *fight) step(input int) {
 		return
 	}
 	f.laserWait = max(0, f.laserWait-1)
+	f.jumpWait = max(0, f.jumpWait-1)
 	player, cpu := &f.fighters[0], &f.fighters[1]
 	cpuInput := f.cpuInput(cpu, player)
-	player.advance(input&^laser, 1.45, 9)
+	player.advance(input&(left|right|punch|guard), 1.45, 9)
 	cpu.advance(cpuInput, f.cpu.speed, f.cpu.windup)
 	const gap = 24
 	if cpu.x-player.x < gap {
@@ -107,7 +118,7 @@ func (f *fight) step(input int) {
 		player.x, cpu.x = center-gap/2, center+gap/2
 	}
 	if cpu.x-player.x <= punchRange {
-		playerHit := player.action == strike && player.ticks == 3
+		playerHit := player.action == strike && player.ticks == 3 && cpu.height() < punchReachHeight
 		cpuHit := cpu.action == strike && cpu.ticks == 3
 		if playerHit {
 			cpu.hit(17)
@@ -149,6 +160,9 @@ func (p *fighter) advance(input int, speed float64, windupTicks int) {
 		case laserFiring:
 			p.action, p.ticks = recovering, laserRecoveryTicks
 			return
+		case rocketJump:
+			p.action, p.ticks = recovering, jumpLandingTicks
+			return
 		}
 	}
 
@@ -165,6 +179,10 @@ func (p *fighter) advance(input int, speed float64, windupTicks int) {
 		p.action, p.ticks = laserCharging, laserChargeTicks
 		return
 	}
+	if input&jump != 0 {
+		p.action, p.ticks = rocketJump, jumpTicks
+		return
+	}
 
 	direction := 0.0
 	if input&left != 0 {
@@ -174,6 +192,14 @@ func (p *fighter) advance(input int, speed float64, windupTicks int) {
 		direction++
 	}
 	p.x = min(rightWall, max(leftWall, p.x+direction*speed))
+}
+
+func (p *fighter) height() int {
+	if p.action != rocketJump {
+		return 0
+	}
+	elapsed := jumpTicks - p.ticks
+	return 4 * jumpPeak * elapsed * p.ticks / (jumpTicks * jumpTicks)
 }
 
 func (p *fighter) hit(damage int) {
@@ -189,13 +215,17 @@ func (f *fight) cpuInput(cpu, player *fighter) int {
 	if cpu.ticks > 0 {
 		return 0
 	}
+	distance := cpu.x - player.x
+	if f.cpu.rocketBoots && f.jumpWait == 0 && distance <= punchRange && player.action == windup {
+		f.jumpWait = jumpCooldownTicks
+		return jump
+	}
 	if f.cpuWait > 0 {
 		f.cpuWait--
 		if cpu.action == blocking {
 			return guard
 		}
 	}
-	distance := cpu.x - player.x
 	if distance > punchRange && distance <= float64(f.cpu.laserRange) && f.laserWait == 0 {
 		f.laserWait = laserCooldownTicks
 		return laser

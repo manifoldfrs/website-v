@@ -5,6 +5,7 @@ const palettes = {
 const floor = 117
 const laserCharging = 6
 const laserFiring = 7
+const rocketJump = 8
 
 function painter(ctx) {
   return (color, x, y, width, height) => {
@@ -75,11 +76,13 @@ export function drawArena(ctx) {
   }
 }
 
-export function drawRobot(ctx, { x, health, action, color, facesRight, laserRange }) {
+export function drawRobot(ctx, { x, health, action, color, facesRight, laserRange, lift, rocketBoots }) {
   const shades = palettes[color]
   const rect = painter(ctx)
+  const bootY = floor - lift
+  const spriteX = (dx, w) => x + (facesRight ? dx : -dx - w)
   const part = (shade, dx, dy, w, h) => {
-    rect(shades[shade], x + (facesRight ? dx : -dx - w), floor + dy, w, h)
+    rect(shades[shade], spriteX(dx, w), bootY + dy, w, h)
   }
 
   const knockout = health === 0
@@ -108,6 +111,18 @@ export function drawRobot(ctx, { x, health, action, color, facesRight, laserRang
   part(0, 1, -10, 19, 11)
   part(2, 2, -9, 17, 7)
   part(3, 3, -9, 14, 2)
+
+  if (rocketBoots) {
+    for (const heel of [-16, 4]) {
+      part(1, heel, -6, 9, 6)
+      part(4, heel + 2, -4, 5, 2)
+      if (action === rocketJump) {
+        rect("#dc592d", spriteX(heel + 1, 7), bootY, 7, 8)
+        rect("#f9a054", spriteX(heel + 2, 5), bootY, 5, 6)
+        rect("#fff0ac", spriteX(heel + 3, 3), bootY, 3, 3)
+      }
+    }
+  }
 
   part(0, -14, -50, 26, 24)
   part(0, -17, -45, 29, 14)
@@ -174,7 +189,7 @@ export function drawRobot(ctx, { x, health, action, color, facesRight, laserRang
   if (action === laserCharging || action === laserFiring) {
     const direction = facesRight ? 1 : -1
     const eyeX = x + 8 * direction
-    const eyeY = floor + headY + 8
+    const eyeY = bootY + headY + 8
     rect("#8834a7", eyeX - 5, eyeY - 5, 11, 11)
     rect("#e591ff", eyeX - 3, eyeY - 3, 7, 7)
     rect("#fff1ff", eyeX - 1, eyeY - 1, 3, 3)

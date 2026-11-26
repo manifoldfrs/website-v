@@ -4,7 +4,7 @@ import "syscall/js"
 
 func main() {
 	var current fight
-	var frame [8]byte
+	var frame [10]byte
 
 	publish := func(target js.Value) {
 		for i, robot := range current.fighters {
@@ -15,6 +15,11 @@ func main() {
 		}
 		frame[6] = byte(current.result)
 		frame[7] = byte(current.cpu.laserRange)
+		frame[8] = byte(current.fighters[1].height())
+		frame[9] = 0
+		if current.cpu.rocketBoots {
+			frame[9] = 1
+		}
 		js.CopyBytesToJS(target, frame[:])
 	}
 
