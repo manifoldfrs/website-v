@@ -17,9 +17,16 @@ body { margin: 0; }
 
 .scoreboard {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 22px;
+  grid-template-columns: 1fr auto 1fr;
+  gap: clamp(6px, 2vw, 14px);
   padding: 2px 2px 10px;
+}
+
+#round-number {
+  align-self: center;
+  color: #c3af94;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .fighter label {

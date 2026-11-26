@@ -14,18 +14,23 @@ const fighters = [...document.querySelectorAll(".fighter")].map((panel) => ({
 }))
 const colorNames = { blue: "Blue", red: "Red" }
 const visitKey = "slop-bots-last-player-color"
+const playerWins = 1
+const cpuWins = 2
+const moveLeft = 1
+const moveRight = 2
 const overlay = document.querySelector(".round")
 const status = document.querySelector("#round-status")
+const roundNumber = document.querySelector("#round-number")
 const play = document.querySelector("#play")
 const buttons = [...document.querySelectorAll("[data-input]")]
 const keys = new Map([
-  ["KeyA", 1], ["ArrowLeft", 1],
-  ["KeyD", 2], ["ArrowRight", 2],
+  ["KeyA", moveLeft], ["ArrowLeft", moveLeft],
+  ["KeyD", moveRight], ["ArrowRight", moveRight],
   ["KeyJ", 4], ["Space", 4],
   ["KeyK", 8], ["ShiftLeft", 8], ["ShiftRight", 8],
 ])
 
-const readyFrame = Uint8Array.of(70, 100, 0, 186, 100, 0, 0)
+const readyFrame = Uint8Array.of(70, 100, 0, 186, 100, 0, 0, 0)
 const frame = readyFrame.slice()
 const pressedKeys = new Set()
 const pointers = new Map()
@@ -37,15 +42,28 @@ let lastTime = 0
 let elapsed = 0
 let frameRequest = 0
 let visit = 0
-let playerColor
+let round = 1
+let startingColor
+
+function playerOnRight() {
+  return (startingColor === "red") !== (round % 2 === 0)
+}
 
 function render() {
   ctx.drawImage(background, 0, 0)
+  const mirrored = playerOnRight()
   fighters.forEach(({ panel, bar }, i) => {
     const offset = i * 3
     const [x, health, action] = frame.subarray(offset, offset + 3)
     if (bar.value !== health) bar.value = health
-    drawRobot(ctx, { x, health, action, color: panel.dataset.color, facesRight: i === 0 })
+    drawRobot(ctx, {
+      x: mirrored ? canvas.width - x : x,
+      health,
+      action,
+      color: panel.dataset.color,
+      facesRight: mirrored ? i === 1 : i === 0,
+      laserRange: frame[7],
+    })
   })
 }
 
@@ -67,8 +85,21 @@ function nextColor() {
       // A browser can block one storage API and still allow the other.
     }
   }
-  if (playerColor) return playerColor === "blue" ? "red" : "blue"
+  if (startingColor) return startingColor === "blue" ? "red" : "blue"
   return Math.random() < 0.5 ? "blue" : "red"
+}
+
+function showRound() {
+  const mirrored = playerOnRight()
+  const [left, right] = mirrored ? [fighters[1], fighters[0]] : fighters
+  for (const [fighter, color] of [[left, "blue"], [right, "red"]]) {
+    fighter.panel.dataset.color = color
+    fighter.name.textContent = colorNames[color]
+  }
+  roundNumber.textContent = `Round ${round}`
+  roundNumber.before(left.panel)
+  roundNumber.after(right.panel)
+  canvas.setAttribute("aria-label", mirrored ? "Red is your robot on the right." : "Blue is your robot on the left.")
 }
 
 function prepareVisit() {
@@ -77,14 +108,9 @@ function prepareVisit() {
   cancelAnimationFrame(frameRequest)
   releaseInputs()
   frame.set(readyFrame)
-
-  playerColor = nextColor()
-  const colors = [playerColor, playerColor === "blue" ? "red" : "blue"]
-  fighters.forEach(({ panel, name }, i) => {
-    panel.dataset.color = colors[i]
-    name.textContent = colorNames[colors[i]]
-  })
-  canvas.setAttribute("aria-label", `${colorNames[colors[0]]} is your robot. ${colorNames[colors[1]]} is the CPU robot.`)
+  round = 1
+  startingColor = nextColor()
+  showRound()
   status.textContent = ""
   play.textContent = "Fight"
   overlay.hidden = false
@@ -101,6 +127,11 @@ function tick(time) {
     tapped = 0
     for (const key of pressedKeys) input |= keys.get(key)
     for (const button of pointers.values()) input |= Number(button.dataset.input)
+    if (playerOnRight()) {
+      const movingLeft = input & moveLeft
+      const movingRight = input & moveRight
+      input = (input & ~(moveLeft | moveRight)) | (movingLeft << 1) | (movingRight >> 1)
+    }
     window.stepScrapCircuit(input, frame)
     elapsed -= timestep
   }
@@ -114,7 +145,7 @@ function tick(time) {
   releaseInputs()
   overlay.hidden = false
   status.textContent = ["", "You win", `${fighters[1].name.textContent} wins`, "Double knockout"][frame[6]]
-  play.textContent = "Rematch"
+  play.textContent = ["", "Next round", "Restart", "Retry round"][frame[6]]
 }
 
 async function loadGame() {
@@ -129,6 +160,7 @@ async function loadGame() {
 }
 
 play.addEventListener("click", async () => {
+  if (running || play.disabled) return
   const currentVisit = visit
   if (!loaded) {
     play.disabled = true
@@ -148,8 +180,14 @@ play.addEventListener("click", async () => {
     }
   }
   if (currentVisit !== visit) return
+  if (frame[6] === playerWins) {
+    round++
+  } else if (frame[6] === cpuWins) {
+    round = 1
+  }
+  showRound()
   releaseInputs()
-  window.resetScrapCircuit(Math.floor(Math.random() * 0x7fffffff), frame)
+  window.resetScrapCircuit(Math.floor(Math.random() * 0x7fffffff), frame, round)
   status.textContent = ""
   overlay.hidden = true
   canvas.focus({ preventScroll: true })

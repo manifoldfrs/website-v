@@ -9,6 +9,7 @@ const (
 	right
 	punch
 	guard
+	laser
 )
 
 const (
@@ -18,6 +19,8 @@ const (
 	recovering
 	blocking
 	staggered
+	laserCharging
+	laserFiring
 )
 
 const (
@@ -31,6 +34,15 @@ const (
 	leftWall   = 30
 	rightWall  = 226
 	punchRange = 38
+	laserRange = 108
+)
+
+const (
+	laserChargeTicks   = 30
+	laserFireTicks     = 10
+	laserRecoveryTicks = 27
+	laserCooldownTicks = 180
+	laserDamage        = 24
 )
 
 type fighter struct {
@@ -40,18 +52,41 @@ type fighter struct {
 	ticks  int
 }
 
-type fight struct {
-	fighters [2]fighter
-	result   int
-	cpuWait  int
-	random   *rand.Rand
+type cpuDifficulty struct {
+	speed       float64
+	windup      int
+	attackDelay int
+	damage      int
+	laserRange  int
 }
 
-func newFight(seed int64) fight {
+type fight struct {
+	fighters  [2]fighter
+	cpu       cpuDifficulty
+	result    int
+	cpuWait   int
+	laserWait int
+	random    *rand.Rand
+}
+
+func newFight(seed int64, round int) fight {
+	wins := float64(max(1, round) - 1)
+	pressure := wins / (wins + 6)
+	beamRange := 0
+	if round >= 4 {
+		beamRange = laserRange
+	}
 	return fight{
 		fighters: [2]fighter{
 			{x: 70, health: 100},
 			{x: 186, health: 100},
+		},
+		cpu: cpuDifficulty{
+			speed:       1.1 + 0.9*pressure,
+			windup:      17 - int(11*pressure),
+			attackDelay: 15 - int(10*pressure),
+			damage:      14 + int(11*pressure),
+			laserRange:  beamRange,
 		},
 		random: rand.New(rand.NewSource(seed)),
 	}
@@ -61,32 +96,36 @@ func (f *fight) step(input int) {
 	if f.result != playing {
 		return
 	}
-	blue, red := &f.fighters[0], &f.fighters[1]
-	cpu := f.cpuInput(red, blue)
-	blue.advance(input, 1.45, 9)
-	red.advance(cpu, 1.1, 17)
+	f.laserWait = max(0, f.laserWait-1)
+	player, cpu := &f.fighters[0], &f.fighters[1]
+	cpuInput := f.cpuInput(cpu, player)
+	player.advance(input&^laser, 1.45, 9)
+	cpu.advance(cpuInput, f.cpu.speed, f.cpu.windup)
 	const gap = 24
-	if red.x-blue.x < gap {
-		center := min(rightWall-gap/2, max(leftWall+gap/2, (blue.x+red.x)/2))
-		blue.x, red.x = center-gap/2, center+gap/2
+	if cpu.x-player.x < gap {
+		center := min(rightWall-gap/2, max(leftWall+gap/2, (player.x+cpu.x)/2))
+		player.x, cpu.x = center-gap/2, center+gap/2
 	}
-	if red.x-blue.x <= punchRange {
-		blueHit := blue.action == strike && blue.ticks == 3
-		redHit := red.action == strike && red.ticks == 3
-		if blueHit {
-			red.hit(17)
+	if cpu.x-player.x <= punchRange {
+		playerHit := player.action == strike && player.ticks == 3
+		cpuHit := cpu.action == strike && cpu.ticks == 3
+		if playerHit {
+			cpu.hit(17)
 		}
-		if redHit {
-			blue.hit(14)
+		if cpuHit {
+			player.hit(f.cpu.damage)
 		}
+	}
+	if cpu.action == laserFiring && cpu.ticks == laserFireTicks && cpu.x-player.x <= float64(f.cpu.laserRange) {
+		player.hit(laserDamage)
 	}
 
 	switch {
-	case blue.health == 0 && red.health == 0:
+	case player.health == 0 && cpu.health == 0:
 		f.result = draw
-	case blue.health == 0:
+	case player.health == 0:
 		f.result = cpuWins
-	case red.health == 0:
+	case cpu.health == 0:
 		f.result = playerWins
 	}
 }
@@ -104,6 +143,12 @@ func (p *fighter) advance(input int, speed float64, windupTicks int) {
 		case strike:
 			p.action, p.ticks = recovering, 19
 			return
+		case laserCharging:
+			p.action, p.ticks = laserFiring, laserFireTicks
+			return
+		case laserFiring:
+			p.action, p.ticks = recovering, laserRecoveryTicks
+			return
 		}
 	}
 
@@ -114,6 +159,10 @@ func (p *fighter) advance(input int, speed float64, windupTicks int) {
 	}
 	if input&punch != 0 {
 		p.action, p.ticks = windup, windupTicks
+		return
+	}
+	if input&laser != 0 {
+		p.action, p.ticks = laserCharging, laserChargeTicks
 		return
 	}
 
@@ -146,11 +195,16 @@ func (f *fight) cpuInput(cpu, player *fighter) int {
 			return guard
 		}
 	}
-	if cpu.x-player.x <= punchRange-4 {
+	distance := cpu.x - player.x
+	if distance > punchRange && distance <= float64(f.cpu.laserRange) && f.laserWait == 0 {
+		f.laserWait = laserCooldownTicks
+		return laser
+	}
+	if distance <= punchRange-4 {
 		if f.cpuWait > 0 {
 			return 0
 		}
-		f.cpuWait = 15 + f.random.Intn(15)
+		f.cpuWait = f.cpu.attackDelay + f.random.Intn(15)
 		if player.action == windup && f.random.Intn(3) == 0 {
 			return guard
 		}
