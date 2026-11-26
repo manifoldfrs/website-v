@@ -6,6 +6,9 @@ const floor = 117
 const laserCharging = 6
 const laserFiring = 7
 const rocketJump = 8
+export const transforming = 9
+const teleportCharging = 10
+const teleportArriving = 11
 
 function painter(ctx) {
   return (color, x, y, width, height) => {
@@ -76,13 +79,18 @@ export function drawArena(ctx) {
   }
 }
 
-export function drawRobot(ctx, { x, health, action, color, facesRight, laserRange, lift, rocketBoots }) {
+export function drawRobot(ctx, { x, health, action, color, facesRight, laserRange, lift, rocketBoots, bossGrowth }) {
   const shades = palettes[color]
   const rect = painter(ctx)
   const bootY = floor - lift
-  const spriteX = (dx, w) => x + (facesRight ? dx : -dx - w)
+  const scale = 1 + bossGrowth * 0.28
+  const scaled = value => Math.round(value * scale)
+  const mark = (tint, dx, dy, w, h) => {
+    const left = facesRight ? dx : -dx - w
+    rect(tint, x + scaled(left), bootY + scaled(dy), scaled(left + w) - scaled(left), scaled(dy + h) - scaled(dy))
+  }
   const part = (shade, dx, dy, w, h) => {
-    rect(shades[shade], spriteX(dx, w), bootY + dy, w, h)
+    mark(shades[shade], dx, dy, w, h)
   }
 
   const knockout = health === 0
@@ -95,7 +103,16 @@ export function drawRobot(ctx, { x, health, action, color, facesRight, laserRang
   const gloveX = punching ? 29 : guarding ? 13 : windingUp ? -8 : 12
   const gloveY = guarding ? -54 : windingUp ? -41 : -45
 
-  rect("#191420", x - 22, floor, 44, 4)
+  rect("#191420", x - scaled(22), floor, 2 * scaled(22), 4)
+  if (action === transforming) {
+    const rise = 12 + Math.round(bossGrowth * 68)
+    mark("#63384f", -23, -rise, 46, 4)
+    mark("#ffc371", -23, -rise, 4, 3)
+    mark("#ffc371", 19, -rise, 4, 3)
+  }
+  if (bossGrowth >= 0.45) {
+    drawWings(part, mark)
+  }
   part(0, -16, -27, 14, 21)
   part(0, 0, -29, 14, 23)
   part(1, -14, -24, 11, 17)
@@ -117,9 +134,9 @@ export function drawRobot(ctx, { x, health, action, color, facesRight, laserRang
       part(1, heel, -6, 9, 6)
       part(4, heel + 2, -4, 5, 2)
       if (action === rocketJump) {
-        rect("#dc592d", spriteX(heel + 1, 7), bootY, 7, 8)
-        rect("#f9a054", spriteX(heel + 2, 5), bootY, 5, 6)
-        rect("#fff0ac", spriteX(heel + 3, 3), bootY, 3, 3)
+        mark("#dc592d", heel + 1, 0, 7, 8)
+        mark("#f9a054", heel + 2, 0, 5, 6)
+        mark("#fff0ac", heel + 3, 0, 3, 3)
       }
     }
   }
@@ -147,6 +164,11 @@ export function drawRobot(ctx, { x, health, action, color, facesRight, laserRang
   part(3, 5 + recoil, headY + 11, 6, 3)
   part(1, -10 + recoil, headY + 7, 5, 5)
   part(4, -9 + recoil, headY + 8, 2, 2)
+
+  if (bossGrowth >= 0.45) {
+    mark("#ffc371", -5 + recoil, headY + 1, 11, 2)
+    mark("#ffc371", -2, -36, 6, 3)
+  }
 
   part(0, -15, -47, 12, 21)
   part(0, -19, -43, 20, 13)
@@ -186,21 +208,24 @@ export function drawRobot(ctx, { x, health, action, color, facesRight, laserRang
   part(3, gloveX, gloveY, 10, 6)
   part(4, gloveX + 2, gloveY, 7, 2)
 
+  if (bossGrowth >= 0.45) {
+    part(0, 8, -50, 15, 8)
+    part(2, 9, -49, 13, 6)
+    part(4, 20, -48, 3, 4)
+  }
   if (action === laserCharging || action === laserFiring) {
     const direction = facesRight ? 1 : -1
-    const eyeX = x + 8 * direction
-    const eyeY = bootY + headY + 8
-    rect("#8834a7", eyeX - 5, eyeY - 5, 11, 11)
-    rect("#e591ff", eyeX - 3, eyeY - 3, 7, 7)
-    rect("#fff1ff", eyeX - 1, eyeY - 1, 3, 3)
-    if (action === laserFiring) {
-      const end = x + laserRange * direction
-      const start = Math.min(eyeX, end)
-      const width = Math.abs(end - eyeX)
-      rect("#8834a7", start, eyeY - 3, width, 7)
-      rect("#e591ff", start, eyeY - 1, width, 3)
-      rect("#fff1ff", start, eyeY, width, 1)
-    }
+    const end = x + laserRange * direction
+    const firing = action === laserFiring
+    drawLaser(rect, x + scaled(8) * direction, bootY + scaled(headY + 8), end, firing)
+    drawLaser(rect, x + scaled(22) * direction, bootY + scaled(-45), end, firing)
+  }
+  if (action === teleportCharging || action === teleportArriving) {
+    const rim = action === teleportArriving ? 27 : 21
+    mark("#368a97", -rim, -65, 3, 65)
+    mark("#368a97", rim - 3, -65, 3, 65)
+    mark("#93f1df", -rim, -1, rim * 2, 2)
+    mark("#93f1df", -rim + 4, -70, rim * 2 - 8, 2)
   }
   if (windingUp) {
     rect("#ffcf80", x + (facesRight ? 7 : -10), floor - 70, 3, 3)
@@ -211,4 +236,36 @@ export function drawRobot(ctx, { x, health, action, color, facesRight, laserRang
     rect("#ffe8aa", spark - 5, floor - 56, 11, 3)
     rect("#fff5d6", spark - 1, floor - 56, 3, 3)
   }
+}
+
+function drawWings(part, mark) {
+  part(0, -15, -66, 30, 37)
+  part(1, -13, -64, 26, 30)
+  part(0, 9, -67, 18, 9)
+  part(0, 7, -58, 15, 9)
+  part(2, 11, -65, 14, 5)
+  part(3, 13, -64, 11, 1)
+  part(0, -39, -70, 14, 11)
+  part(0, -34, -64, 22, 13)
+  part(0, -28, -52, 19, 12)
+  part(0, -21, -41, 13, 10)
+  part(2, -37, -68, 11, 7)
+  part(2, -32, -62, 18, 9)
+  part(2, -26, -51, 15, 7)
+  part(3, -35, -67, 8, 2)
+  part(3, -30, -59, 13, 2)
+  mark("#ffc371", -37, -68, 4, 2)
+}
+
+function drawLaser(rect, origin, y, end, firing) {
+  rect("#8834a7", origin - 4, y - 4, 9, 9)
+  rect("#e591ff", origin - 2, y - 2, 5, 5)
+  rect("#fff1ff", origin - 1, y - 1, 3, 3)
+  if (!firing) return
+
+  const start = Math.min(origin, end)
+  const width = Math.abs(end - origin)
+  rect("#8834a7", start, y - 3, width, 7)
+  rect("#e591ff", start, y - 1, width, 3)
+  rect("#fff1ff", start, y, width, 1)
 }

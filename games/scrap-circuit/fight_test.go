@@ -92,6 +92,7 @@ func TestSecondRoundOpponentClosesFasterAndHitsSooner(t *testing.T) {
 func TestOpponentUnlocksLaserInRoundFour(t *testing.T) {
 	for round := 1; round <= 5; round++ {
 		match := newFight(0, round)
+		finishTransformation(&match)
 		match.fighters[0].x, match.fighters[1].x = 100, 175
 		match.step(0)
 		if charging := match.fighters[1].action == laserCharging; charging != (round >= 4) {
@@ -103,6 +104,7 @@ func TestOpponentUnlocksLaserInRoundFour(t *testing.T) {
 func TestRocketBootsUnlockAfterTwoWins(t *testing.T) {
 	for round := 1; round <= 4; round++ {
 		match := newFight(0, round)
+		finishTransformation(&match)
 		player, cpu := &match.fighters[0], &match.fighters[1]
 		player.x, cpu.x = 100, 135
 		match.step(punch)
@@ -147,6 +149,7 @@ func TestLaserWarnsForHalfASecondAndHitsOnce(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			match := newFight(0, 4)
+			finishTransformation(&match)
 			player, cpu := &match.fighters[0], &match.fighters[1]
 			player.x, cpu.x = 110, 205
 			match.step(tc.input)
@@ -167,5 +170,60 @@ func TestLaserWarnsForHalfASecondAndHitsOnce(t *testing.T) {
 				t.Fatal("the same laser dealt damage twice")
 			}
 		})
+	}
+}
+
+func TestBossTransformationRunsBeforeCombat(t *testing.T) {
+	third, fourth, fifth := newFight(0, 3), newFight(0, 4), newFight(0, 5)
+	if third.cpu.boss || third.fighters[1].health != 100 {
+		t.Fatal("boss appeared before three wins")
+	}
+	if fourth.fighters[1].action != transforming || fifth.fighters[1].action == transforming || !fifth.cpu.boss {
+		t.Fatal("the intro should play once when the boss first unlocks")
+	}
+	if fourth.fighters[1].health <= third.fighters[1].health || fourth.cpu.damage <= third.cpu.damage {
+		t.Fatal("the boss should have more health and hit harder")
+	}
+	before := fourth.fighters[0]
+	for tick := 1; tick <= transformTicks; tick++ {
+		fourth.step(right | punch)
+		if fourth.fighters[0] != before || fourth.fighters[1].x != 186 {
+			t.Fatal("combat advanced during the transformation")
+		}
+		if tick < transformTicks && fourth.fighters[1].action != transforming {
+			t.Fatal("transformation ended early")
+		}
+	}
+	fourth.step(right)
+	if fourth.fighters[0].x <= before.x {
+		t.Fatal("controls did not resume after the intro")
+	}
+}
+
+func TestBossTeleportsAfterWarningWithoutCrossingPlayer(t *testing.T) {
+	match := newFight(0, 4)
+	finishTransformation(&match)
+	player, cpu := &match.fighters[0], &match.fighters[1]
+	player.x, cpu.x = 90, 185
+	match.laserWait, match.teleportWait = 100, 0
+	match.step(0)
+	for range teleportChargeTicks - 1 {
+		match.step(left)
+		if cpu.action != teleportCharging || cpu.x != 185 {
+			t.Fatal("boss teleported before the warning ended")
+		}
+	}
+	match.step(left)
+	if cpu.action != teleportArriving || cpu.x != player.x+teleportGap || player.health != 100 {
+		t.Fatalf("expected a non-damaging teleport toward the player's current position, got x=%v, player x=%v, hp=%d", cpu.x, player.x, player.health)
+	}
+	if match.teleportWait <= 0 {
+		t.Fatal("teleport did not consume its cooldown")
+	}
+}
+
+func finishTransformation(match *fight) {
+	for match.fighters[1].action == transforming {
+		match.step(0)
 	}
 }

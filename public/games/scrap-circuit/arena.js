@@ -1,4 +1,4 @@
-import { drawArena, drawRobot } from "./arena-art.js"
+import { drawArena, drawRobot, transforming } from "./arena-art.js"
 
 const canvas = document.querySelector("canvas")
 const ctx = canvas.getContext("2d")
@@ -30,7 +30,7 @@ const keys = new Map([
   ["KeyK", 8], ["ShiftLeft", 8], ["ShiftRight", 8],
 ])
 
-const readyFrame = Uint8Array.of(70, 100, 0, 186, 100, 0, 0, 0, 0, 0)
+const readyFrame = Uint8Array.of(70, 100, 0, 186, 100, 0, 0, 0, 0, 0, 0, 100)
 const frame = readyFrame.slice()
 const pressedKeys = new Set()
 const pointers = new Map()
@@ -51,10 +51,14 @@ function playerOnRight() {
 
 function render() {
   ctx.drawImage(background, 0, 0)
+  const roundLabel = frame[5] === transforming ? "Transforming" : `Round ${round}${round >= 4 ? " · Boss" : ""}`
+  if (roundNumber.textContent !== roundLabel) roundNumber.textContent = roundLabel
   const mirrored = playerOnRight()
   fighters.forEach(({ panel, bar }, i) => {
     const offset = i * 3
     const [x, health, action] = frame.subarray(offset, offset + 3)
+    const maxHealth = i === 1 ? frame[11] : 100
+    if (bar.max !== maxHealth) bar.max = maxHealth
     if (bar.value !== health) bar.value = health
     drawRobot(ctx, {
       x: mirrored ? canvas.width - x : x,
@@ -65,6 +69,7 @@ function render() {
       laserRange: frame[7],
       lift: i === 1 ? frame[8] : 0,
       rocketBoots: i === 1 && frame[9] === 1,
+      bossGrowth: i === 1 ? frame[10] / 100 : 0,
     })
   })
 }
@@ -98,7 +103,6 @@ function showRound() {
     fighter.panel.dataset.color = color
     fighter.name.textContent = colorNames[color]
   }
-  roundNumber.textContent = `Round ${round}`
   roundNumber.before(left.panel)
   roundNumber.after(right.panel)
   canvas.setAttribute("aria-label", mirrored ? "Red is your robot on the right." : "Blue is your robot on the left.")
