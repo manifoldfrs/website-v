@@ -272,6 +272,100 @@ func TestBossTeleportsAfterWarningWithoutCrossingPlayer(t *testing.T) {
 	}
 }
 
+func TestBossKeepsItsFormAndUnlocksAirborneLasersInRoundSix(t *testing.T) {
+	for _, round := range []int{4, 5, 6, 7, 25} {
+		match := newFight(0, round)
+		finishTransformation(&match)
+		player, cpu := &match.fighters[0], &match.fighters[1]
+		if !match.cpu.boss || cpu.health != 135 {
+			t.Fatalf("round %d lost the boss form", round)
+		}
+		player.x, cpu.x = 90, 185
+		match.step(0)
+		want := laserCharging
+		if round == 6 || round == 7 {
+			want = hoverCharging
+		}
+		if cpu.action != want {
+			t.Fatalf("round %d: got action %d, want %d", round, cpu.action, want)
+		}
+	}
+}
+
+func TestRoundEightAlternatesQuickGroundAndAirLasers(t *testing.T) {
+	seventh, match := newFight(0, 7), newFight(0, 8)
+	if match.cpu.speed <= seventh.cpu.speed || match.cpu.windup >= seventh.cpu.windup || match.cpu.attackDelay >= seventh.cpu.attackDelay {
+		t.Fatal("round eight should move and counter faster than round seven")
+	}
+	player, cpu := &match.fighters[0], &match.fighters[1]
+	player.x, cpu.x = 90, 125
+	previousAction, lastShot := ready, -1
+	var shots, intervals, warnings []int
+	chargeStart := -1
+	for tick := 0; tick < 270 && len(shots) < 3; tick++ {
+		match.step(guard)
+		if cpu.action != previousAction {
+			switch cpu.action {
+			case laserCharging, hoverCharging:
+				chargeStart = tick
+			case laserFiring, hoverFiring:
+				shots = append(shots, cpu.action)
+				warnings = append(warnings, tick-chargeStart)
+				if lastShot >= 0 {
+					intervals = append(intervals, tick-lastShot)
+				}
+				lastShot = tick
+			}
+		}
+		previousAction = cpu.action
+	}
+	if len(shots) != 3 || shots[0] != laserFiring || shots[1] != hoverFiring || shots[2] != laserFiring {
+		t.Fatalf("expected ground, air, ground, got %v", shots)
+	}
+	for _, warning := range warnings {
+		if warning != laserChargeTicks {
+			t.Fatalf("expected the half-second warning, got %d ticks", warning)
+		}
+	}
+	for _, interval := range intervals {
+		if interval < rapidLaserCooldown || interval >= laserCooldownTicks {
+			t.Fatalf("expected quicker attacks, got %d ticks between shots", interval)
+		}
+	}
+}
+
+func TestAirborneLaserWarnsFiresAndLands(t *testing.T) {
+	match := newFight(0, 6)
+	player, cpu := &match.fighters[0], &match.fighters[1]
+	player.x, cpu.x = 90, 185
+	match.step(0)
+	for range laserChargeTicks - 1 {
+		match.step(0)
+		if cpu.action != hoverCharging || player.health != 100 {
+			t.Fatal("airborne laser hit before the warning ended")
+		}
+	}
+	if cpu.height() != hoverHeight {
+		t.Fatal("boss did not rise during the warning")
+	}
+	match.step(guard)
+	if cpu.action != hoverFiring || cpu.height() != hoverHeight || player.health != 98 {
+		t.Fatal("boss did not fire while airborne or guard did not reduce damage")
+	}
+	for range laserFireTicks {
+		match.step(0)
+	}
+	if cpu.action != hoverLanding || player.health != 98 {
+		t.Fatal("the burst did not finish cleanly or dealt damage twice")
+	}
+	for range hoverLandingTicks {
+		match.step(0)
+	}
+	if cpu.action != recovering || cpu.height() != 0 {
+		t.Fatal("boss did not land before recovery ended")
+	}
+}
+
 func finishTransformation(match *fight) {
 	for match.fighters[1].action == transforming {
 		match.step(0)

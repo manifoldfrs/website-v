@@ -54,6 +54,7 @@ function render() {
   const roundLabel = frame[5] === transforming ? "Transforming" : `Round ${round}${round >= 4 ? " · Boss" : ""}`
   if (roundNumber.textContent !== roundLabel) roundNumber.textContent = roundLabel
   const mirrored = playerOnRight()
+  const playerX = mirrored ? canvas.width - frame[0] : frame[0]
   fighters.forEach(({ panel, bar }, i) => {
     const offset = i * 3
     const [x, health, action] = frame.subarray(offset, offset + 3)
@@ -67,6 +68,7 @@ function render() {
       color: panel.dataset.color,
       facesRight: mirrored ? i === 1 : i === 0,
       laserRange: frame[7],
+      targetX: playerX,
       lift: i === 1 ? frame[8] : 0,
       rocketBoots: i === 1 && frame[9] === 1,
       bossGrowth: i === 1 ? frame[10] / 100 : 0,

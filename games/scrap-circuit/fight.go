@@ -12,6 +12,7 @@ const (
 	laser
 	jump
 	teleport
+	hoverLaser
 )
 
 const (
@@ -27,6 +28,9 @@ const (
 	transforming
 	teleportCharging
 	teleportArriving
+	hoverCharging
+	hoverFiring
+	hoverLanding
 )
 
 const (
@@ -41,6 +45,9 @@ const (
 	rightWall  = 226
 	punchRange = 38
 	laserRange = 108
+	bossRound  = 4
+	hoverRound = 6
+	rapidRound = 8
 )
 
 const (
@@ -48,7 +55,11 @@ const (
 	laserFireTicks        = 10
 	laserRecoveryTicks    = 27
 	laserCooldownTicks    = 180
+	rapidLaserCooldown    = 88
 	laserDamage           = 24
+	hoverHeight           = 24
+	hoverRiseTicks        = 14
+	hoverLandingTicks     = 16
 	jumpTicks             = 30
 	jumpPeak              = 30
 	jumpLandingTicks      = 14
@@ -78,20 +89,23 @@ type cpuDifficulty struct {
 	guardChance int
 	damage      int
 	laserRange  int
+	hoverLasers bool
+	rapidAttack bool
 	rocketBoots bool
 	maxHealth   int
 	boss        bool
 }
 
 type fight struct {
-	fighters     [2]fighter
-	cpu          cpuDifficulty
-	result       int
-	cpuWait      int
-	laserWait    int
-	jumpWait     int
-	teleportWait int
-	random       *rand.Rand
+	fighters          [2]fighter
+	cpu               cpuDifficulty
+	result            int
+	cpuWait           int
+	laserWait         int
+	jumpWait          int
+	teleportWait      int
+	nextLaserAirborne bool
+	random            *rand.Rand
 }
 
 func newFight(seed int64, round int) fight {
@@ -113,18 +127,25 @@ func newFight(seed int64, round int) fight {
 		},
 		random: rand.New(rand.NewSource(seed)),
 	}
-	if round < 4 {
+	if round < bossRound {
 		return match
 	}
 
 	match.cpu.boss = true
 	match.cpu.laserRange = laserRange
+	match.cpu.hoverLasers = round >= hoverRound
+	match.cpu.rapidAttack = round >= rapidRound
 	match.cpu.maxHealth = 135
 	match.cpu.damage += 3
 	match.cpu.guardChance += 16
+	if match.cpu.rapidAttack {
+		match.cpu.speed += 0.3
+		match.cpu.windup = max(7, match.cpu.windup-3)
+		match.cpu.attackDelay = max(3, match.cpu.attackDelay-3)
+	}
 	match.fighters[1].health = match.cpu.maxHealth
 	match.teleportWait = 60
-	if round == 4 {
+	if round == bossRound {
 		match.fighters[1].action, match.fighters[1].ticks = transforming, transformTicks
 	}
 	return match
@@ -170,7 +191,7 @@ func (f *fight) step(input int) {
 			player.hit(f.cpu.damage)
 		}
 	}
-	if cpu.action == laserFiring && cpu.ticks == laserFireTicks && cpu.x-player.x <= float64(f.cpu.laserRange) {
+	if (cpu.action == laserFiring || cpu.action == hoverFiring) && cpu.ticks == laserFireTicks && cpu.x-player.x <= float64(f.cpu.laserRange) {
 		player.hit(laserDamage)
 	}
 
@@ -203,6 +224,15 @@ func (p *fighter) advance(input int, speed float64, windupTicks int) {
 		case laserFiring:
 			p.action, p.ticks = recovering, laserRecoveryTicks
 			return
+		case hoverCharging:
+			p.action, p.ticks = hoverFiring, laserFireTicks
+			return
+		case hoverFiring:
+			p.action, p.ticks = hoverLanding, hoverLandingTicks
+			return
+		case hoverLanding:
+			p.action, p.ticks = recovering, laserRecoveryTicks-hoverLandingTicks
+			return
 		case rocketJump:
 			p.action, p.ticks = recovering, jumpLandingTicks
 			return
@@ -225,6 +255,10 @@ func (p *fighter) advance(input int, speed float64, windupTicks int) {
 		p.action, p.ticks = laserCharging, laserChargeTicks
 		return
 	}
+	if input&hoverLaser != 0 {
+		p.action, p.ticks = hoverCharging, laserChargeTicks
+		return
+	}
 	if input&jump != 0 {
 		p.action, p.ticks = rocketJump, jumpTicks
 		return
@@ -245,11 +279,19 @@ func (p *fighter) advance(input int, speed float64, windupTicks int) {
 }
 
 func (p *fighter) height() int {
-	if p.action != rocketJump {
+	switch p.action {
+	case rocketJump:
+		elapsed := jumpTicks - p.ticks
+		return 4 * jumpPeak * elapsed * p.ticks / (jumpTicks * jumpTicks)
+	case hoverCharging:
+		return hoverHeight * min(hoverRiseTicks, laserChargeTicks-p.ticks) / hoverRiseTicks
+	case hoverFiring:
+		return hoverHeight
+	case hoverLanding:
+		return hoverHeight * p.ticks / hoverLandingTicks
+	default:
 		return 0
 	}
-	elapsed := jumpTicks - p.ticks
-	return 4 * jumpPeak * elapsed * p.ticks / (jumpTicks * jumpTicks)
 }
 
 func (p *fighter) hit(damage int) {
@@ -273,8 +315,17 @@ func (f *fight) cpuInput(cpu, player *fighter) int {
 	if f.cpuWait > 0 {
 		f.cpuWait--
 	}
-	if distance > punchRange && distance <= float64(f.cpu.laserRange) && f.laserWait == 0 {
+	if distance <= float64(f.cpu.laserRange) && f.laserWait == 0 && (distance > punchRange || f.cpu.rapidAttack) {
 		f.laserWait = laserCooldownTicks
+		airborne := f.cpu.hoverLasers
+		if f.cpu.rapidAttack {
+			f.laserWait = rapidLaserCooldown
+			airborne = f.nextLaserAirborne
+			f.nextLaserAirborne = !airborne
+		}
+		if airborne {
+			return hoverLaser
+		}
 		return laser
 	}
 	if f.cpu.boss && distance >= teleportMinRange && f.teleportWait == 0 {

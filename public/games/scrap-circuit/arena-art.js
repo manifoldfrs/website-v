@@ -1,6 +1,6 @@
 const palettes = {
-  blue: ["#111b34", "#1d385e", "#226d9a", "#36a2ca", "#9be8f9", "#e3fbff"],
-  red: ["#301325", "#602238", "#9f343e", "#e15145", "#ffa483", "#ffeac9"],
+  blue: ["#11182d", "#174264", "#177eac", "#36b4dc", "#a8f1ff", "#eefeff"],
+  red: ["#321321", "#752136", "#bb3438", "#f35948", "#ffad85", "#fff0d5"],
 }
 const floor = 117
 const laserCharging = 6
@@ -9,6 +9,10 @@ const rocketJump = 8
 export const transforming = 9
 const teleportCharging = 10
 const teleportArriving = 11
+const hoverCharging = 12
+const hoverFiring = 13
+const hoverLanding = 14
+const playerEyeY = floor - 57
 
 function painter(ctx) {
   return (color, x, y, width, height) => {
@@ -79,7 +83,7 @@ export function drawArena(ctx) {
   }
 }
 
-export function drawRobot(ctx, { x, health, action, color, facesRight, laserRange, lift, rocketBoots, bossGrowth }) {
+export function drawRobot(ctx, { x, health, action, color, facesRight, laserRange, targetX, lift, rocketBoots, bossGrowth }) {
   const shades = palettes[color]
   const rect = painter(ctx)
   const bootY = floor - lift
@@ -98,6 +102,7 @@ export function drawRobot(ctx, { x, health, action, color, facesRight, laserRang
   const guarding = action === 4 && !knockout
   const windingUp = action === 1 && !knockout
   const reeling = action === 5 && !knockout
+  const hoveringLaser = action === hoverCharging || action === hoverFiring
   const recoil = reeling ? -3 : 0
   const headY = knockout ? -86 : reeling ? -70 : -65
   const gloveX = punching ? 29 : guarding ? 13 : windingUp ? -8 : 12
@@ -120,66 +125,74 @@ export function drawRobot(ctx, { x, health, action, color, facesRight, laserRang
   part(0, -19, -9, 16, 10)
   part(2, -18, -8, 14, 6)
   part(3, -17, -8, 11, 2)
+  part(1, -18, -3, 14, 2)
 
   part(1, 1, -28, 12, 23)
   part(2, 3, -25, 10, 16)
   part(3, 4, -22, 7, 7)
   part(4, 5, -21, 5, 2)
-  part(0, 1, -10, 19, 11)
-  part(2, 2, -9, 17, 7)
-  part(3, 3, -9, 14, 2)
+  part(0, 1, -10, 16, 11)
+  part(0, 3, -6, 19, 7)
+  part(2, 2, -9, 14, 7)
+  part(2, 4, -5, 17, 4)
+  part(3, 3, -9, 12, 2)
+  part(4, 16, -5, 4, 1)
 
   if (rocketBoots) {
-    for (const heel of [-16, 4]) {
-      part(1, heel, -6, 9, 6)
-      part(4, heel + 2, -4, 5, 2)
-      if (action === rocketJump) {
-        mark("#dc592d", heel + 1, 0, 7, 8)
-        mark("#f9a054", heel + 2, 0, 5, 6)
-        mark("#fff0ac", heel + 3, 0, 3, 3)
-      }
-    }
+    drawBoots(part, mark, action === rocketJump || hoveringLaser || (action === hoverLanding && lift > 0))
   }
 
-  part(0, -14, -50, 26, 24)
-  part(0, -17, -45, 29, 14)
-  part(1, -15, -46, 24, 17)
-  part(2, -12, -49, 20, 18)
-  part(3, -11, -48, 18, 6)
-  part(4, -9, -48, 9, 2)
-  part(1, -12, -31, 22, 5)
-  part(3, -11, -31, 16, 2)
+  part(0, -13, -52, 23, 24)
+  part(0, -17, -47, 32, 13)
+  part(0, -14, -35, 26, 9)
+  part(1, -14, -46, 27, 12)
+  part(2, -11, -50, 20, 19)
+  part(2, 3, -45, 9, 10)
+  part(3, -10, -50, 17, 5)
+  part(3, -5, -45, 14, 4)
+  part(4, -8, -49, 11, 2)
+  part(4, 8, -43, 4, 2)
+  part(1, -12, -34, 22, 7)
+  part(3, -9, -31, 17, 2)
+  part(5, 7, -37, 2, 2)
 
-  part(0, -5 + recoil, headY + 13, 9, -headY - 60)
+  part(0, -5 + recoil, headY + 14, 9, -headY - 60)
   for (let y = headY + 16; y < -52; y += 3) {
     part(4, -3 + recoil, y, 5, 1)
   }
-  part(0, -13 + recoil, headY + 2, 23, 14)
-  part(0, -10 + recoil, headY, 19, 3)
-  part(2, -12 + recoil, headY + 2, 21, 11)
-  part(3, -11 + recoil, headY + 2, 19, 4)
-  part(4, -9 + recoil, headY + 2, 12, 1)
-  part(1, -2 + recoil, headY + 6, 13, 4)
-  part(5, 3 + recoil, headY + 7, 6, 2)
-  part(3, 5 + recoil, headY + 11, 6, 3)
-  part(1, -10 + recoil, headY + 7, 5, 5)
-  part(4, -9 + recoil, headY + 8, 2, 2)
+  part(0, -14 + recoil, headY + 2, 24, 13)
+  part(0, -11 + recoil, headY, 20, 4)
+  part(0, 5 + recoil, headY + 3, 9, 7)
+  part(0, -6 + recoil, headY + 13, 17, 5)
+  part(2, -13 + recoil, headY + 2, 21, 12)
+  part(3, -11 + recoil, headY + 1, 20, 5)
+  part(4, -10 + recoil, headY + 2, 15, 1)
+  part(3, 7 + recoil, headY + 4, 6, 3)
+  part(1, -4 + recoil, headY + 6, 16, 5)
+  part(5, 1 + recoil, headY + 7, 8, 1)
+  part(5, 5 + recoil, headY + 8, 5, 1)
+  part(3, 3 + recoil, headY + 11, 7, 2)
+  part(2, -4 + recoil, headY + 14, 14, 3)
+  part(1, -10 + recoil, headY + 7, 5, 6)
+  part(4, -10 + recoil, headY + 8, 2, 2)
+  part(1, 0 + recoil, headY + 15, 7, 1)
 
   if (bossGrowth >= 0.45) {
     mark("#ffc371", -5 + recoil, headY + 1, 11, 2)
     mark("#ffc371", -2, -36, 6, 3)
   }
 
-  part(0, -15, -47, 12, 21)
-  part(0, -19, -43, 20, 13)
-  part(0, -21, -40, 24, 7)
-  part(2, -17, -44, 15, 15)
-  part(2, -19, -41, 19, 9)
-  part(3, -16, -44, 12, 3)
-  part(4, -17, -42, 3, 2)
-  part(3, -14, -41, 9, 8)
-  part(1, -13, -40, 7, 6)
-  part(4, -12, -39, 4, 2)
+  part(0, -16, -48, 13, 21)
+  part(0, -21, -44, 23, 13)
+  part(0, -23, -40, 27, 6)
+  part(2, -17, -46, 15, 16)
+  part(2, -21, -42, 21, 10)
+  part(3, -17, -45, 12, 4)
+  part(4, -17, -44, 8, 1)
+  part(3, -19, -40, 5, 6)
+  part(1, -13, -40, 8, 7)
+  part(4, -12, -39, 5, 2)
+  part(0, -11, -37, 3, 2)
 
   if (knockout) {
     part(0, 3, -38, 9, 23)
@@ -203,22 +216,28 @@ export function drawRobot(ctx, { x, health, action, color, facesRight, laserRang
     part(2, gloveX - 3, gloveY + 6, 9, forearmHeight - 1)
     part(3, gloveX - 1, gloveY + 8, 3, Math.min(6, forearmHeight - 2))
   }
-  part(0, gloveX - 2, gloveY - 2, 14, 14)
-  part(2, gloveX, gloveY, 11, 10)
-  part(3, gloveX, gloveY, 10, 6)
-  part(4, gloveX + 2, gloveY, 7, 2)
+  part(0, gloveX - 2, gloveY - 2, 14, 13)
+  part(0, gloveX + 9, gloveY + 1, 6, 8)
+  part(2, gloveX, gloveY, 12, 9)
+  part(3, gloveX + 2, gloveY, 9, 6)
+  part(3, gloveX + 11, gloveY + 2, 3, 5)
+  part(4, gloveX + 3, gloveY, 8, 2)
+  part(1, gloveX + 7, gloveY + 4, 1, 4)
 
   if (bossGrowth >= 0.45) {
     part(0, 8, -50, 15, 8)
     part(2, 9, -49, 13, 6)
     part(4, 20, -48, 3, 4)
   }
-  if (action === laserCharging || action === laserFiring) {
+  if (action === laserCharging || action === laserFiring || hoveringLaser) {
     const direction = facesRight ? 1 : -1
-    const end = x + laserRange * direction
-    const firing = action === laserFiring
-    drawLaser(rect, x + scaled(8) * direction, bootY + scaled(headY + 8), end, firing)
-    drawLaser(rect, x + scaled(22) * direction, bootY + scaled(-45), end, firing)
+    const reach = hoveringLaser ? Math.min(laserRange, Math.abs(targetX - x)) : laserRange
+    const end = x + reach * direction
+    const firing = action === laserFiring || action === hoverFiring
+    const eyeY = bootY + scaled(headY + 8)
+    const cannonY = bootY + scaled(-45)
+    drawLaser(rect, x + scaled(8) * direction, eyeY, end, hoveringLaser ? playerEyeY : eyeY, firing)
+    drawLaser(rect, x + scaled(22) * direction, cannonY, end, hoveringLaser ? floor - 47 : cannonY, firing)
   }
   if (action === teleportCharging || action === teleportArriving) {
     const rim = action === teleportArriving ? 27 : 21
@@ -235,6 +254,18 @@ export function drawRobot(ctx, { x, health, action, color, facesRight, laserRang
     rect("#faab53", spark - 1, floor - 60, 3, 11)
     rect("#ffe8aa", spark - 5, floor - 56, 11, 3)
     rect("#fff5d6", spark - 1, floor - 56, 3, 3)
+  }
+}
+
+function drawBoots(part, mark, thrust) {
+  for (const heel of [-16, 4]) {
+    part(1, heel, -6, 9, 6)
+    part(4, heel + 2, -4, 5, 2)
+    if (thrust) {
+      mark("#dc592d", heel + 1, 0, 7, 8)
+      mark("#f9a054", heel + 2, 0, 5, 6)
+      mark("#fff0ac", heel + 3, 0, 3, 3)
+    }
   }
 }
 
@@ -257,7 +288,7 @@ function drawWings(part, mark) {
   mark("#ffc371", -37, -68, 4, 2)
 }
 
-function drawLaser(rect, origin, y, end, firing) {
+function drawLaser(rect, origin, y, end, endY, firing) {
   rect("#8834a7", origin - 4, y - 4, 9, 9)
   rect("#e591ff", origin - 2, y - 2, 5, 5)
   rect("#fff1ff", origin - 1, y - 1, 3, 3)
@@ -265,7 +296,16 @@ function drawLaser(rect, origin, y, end, firing) {
 
   const start = Math.min(origin, end)
   const width = Math.abs(end - origin)
-  rect("#8834a7", start, y - 3, width, 7)
-  rect("#e591ff", start, y - 1, width, 3)
-  rect("#fff1ff", start, y, width, 1)
+  if (width === 0) return
+  const direction = Math.sign(end - origin)
+  const slope = (endY - y) / width
+  const chunk = endY === y ? width : 4
+  for (let offset = 0; offset < width; offset += chunk) {
+    const length = Math.min(chunk, width - offset)
+    const x = direction > 0 ? start + offset : origin - offset - length
+    const line = Math.round(y + offset * slope)
+    rect("#8834a7", x, line - 3, length, 7)
+    rect("#e591ff", x, line - 1, length, 3)
+    rect("#fff1ff", x, line, length, 1)
+  }
 }
