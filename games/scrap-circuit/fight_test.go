@@ -89,6 +89,56 @@ func TestSecondRoundOpponentClosesFasterAndHitsSooner(t *testing.T) {
 	}
 }
 
+func TestOpponentBlocksAReadAndCountersDuringRecovery(t *testing.T) {
+	match := newFight(0, 1)
+	match.cpu.guardChance = 100
+	player, cpu := &match.fighters[0], &match.fighters[1]
+	player.x, cpu.x = 100, 134
+	player.action, player.ticks = windup, guardReadTicks
+
+	for range guardReadTicks {
+		match.step(0)
+	}
+	if cpu.health != 98 || cpu.action != blocking {
+		t.Fatalf("read should block the punch, got health %d and action %d", cpu.health, cpu.action)
+	}
+
+	for range 4 {
+		match.step(0)
+	}
+	if cpu.action != windup || cpu.ticks != match.cpu.windup-counterWindupBonus {
+		t.Fatalf("expected a quick counter during recovery, got action %d and %d ticks", cpu.action, cpu.ticks)
+	}
+	for range match.cpu.windup - counterWindupBonus {
+		match.step(0)
+	}
+	if player.health == 100 {
+		t.Fatal("the counter did not catch the player in recovery")
+	}
+}
+
+func TestOpponentStillLeavesAnOpeningAfterItsPunch(t *testing.T) {
+	match := newFight(0, 1)
+	player, cpu := &match.fighters[0], &match.fighters[1]
+	player.x, cpu.x = 100, 134
+	match.step(0)
+	for range match.cpu.windup {
+		match.step(guard)
+	}
+	if player.health != 98 {
+		t.Fatal("guard did not absorb the opponent's attack")
+	}
+	for range 3 {
+		match.step(0)
+	}
+	for range 10 {
+		match.step(punch)
+	}
+	if cpu.health != 83 {
+		t.Fatal("the player could not land a punch during the opponent's recovery")
+	}
+}
+
 func TestOpponentUnlocksLaserInRoundFour(t *testing.T) {
 	for round := 1; round <= 5; round++ {
 		match := newFight(0, round)

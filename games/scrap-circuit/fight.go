@@ -60,6 +60,8 @@ const (
 	teleportCooldownTicks = 210
 	teleportMinRange      = 62
 	teleportGap           = 32
+	guardReadTicks        = 5
+	counterWindupBonus    = 4
 )
 
 type fighter struct {
@@ -73,6 +75,7 @@ type cpuDifficulty struct {
 	speed       float64
 	windup      int
 	attackDelay int
+	guardChance int
 	damage      int
 	laserRange  int
 	rocketBoots bool
@@ -102,7 +105,8 @@ func newFight(seed int64, round int) fight {
 		cpu: cpuDifficulty{
 			speed:       1.1 + 0.9*pressure,
 			windup:      17 - int(11*pressure),
-			attackDelay: 15 - int(10*pressure),
+			attackDelay: 11 - int(8*pressure),
+			guardChance: 22 + int(50*pressure),
 			damage:      14 + int(11*pressure),
 			rocketBoots: round >= 3,
 			maxHealth:   100,
@@ -117,6 +121,7 @@ func newFight(seed int64, round int) fight {
 	match.cpu.laserRange = laserRange
 	match.cpu.maxHealth = 135
 	match.cpu.damage += 3
+	match.cpu.guardChance += 16
 	match.fighters[1].health = match.cpu.maxHealth
 	match.teleportWait = 60
 	if round == 4 {
@@ -138,8 +143,12 @@ func (f *fight) step(input int) {
 	f.jumpWait = max(0, f.jumpWait-1)
 	f.teleportWait = max(0, f.teleportWait-1)
 	cpuInput := f.cpuInput(cpu, player)
+	cpuWindup := f.cpu.windup
+	if cpuInput == punch && player.action == recovering {
+		cpuWindup = max(7, cpuWindup-counterWindupBonus)
+	}
 	player.advance(input&(left|right|punch|guard), 1.45, 9)
-	cpu.advance(cpuInput, f.cpu.speed, f.cpu.windup)
+	cpu.advance(cpuInput, f.cpu.speed, cpuWindup)
 	gap := 24.0
 	if f.cpu.boss {
 		gap = 30
@@ -263,9 +272,6 @@ func (f *fight) cpuInput(cpu, player *fighter) int {
 	}
 	if f.cpuWait > 0 {
 		f.cpuWait--
-		if cpu.action == blocking {
-			return guard
-		}
 	}
 	if distance > punchRange && distance <= float64(f.cpu.laserRange) && f.laserWait == 0 {
 		f.laserWait = laserCooldownTicks
@@ -275,14 +281,22 @@ func (f *fight) cpuInput(cpu, player *fighter) int {
 		f.teleportWait = teleportCooldownTicks
 		return teleport
 	}
-	if distance <= punchRange-4 {
+	if distance <= punchRange {
+		if cpu.action == blocking && (player.action == windup || player.action == strike) {
+			return guard
+		}
+		if player.action == windup {
+			if f.cpuWait == 0 && player.ticks == guardReadTicks && f.random.Intn(100) < f.cpu.guardChance {
+				return guard
+			}
+			return 0
+		}
+	}
+	if distance <= punchRange-4 || (distance <= punchRange && player.action == recovering) {
 		if f.cpuWait > 0 {
 			return 0
 		}
 		f.cpuWait = f.cpu.attackDelay + f.random.Intn(15)
-		if player.action == windup && f.random.Intn(3) == 0 {
-			return guard
-		}
 		return punch
 	}
 	return left
