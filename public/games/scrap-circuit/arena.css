@@ -1,0 +1,113 @@
+:root {
+  color-scheme: dark;
+  font: 14px ui-monospace, Menlo, Consolas, monospace;
+  color: #f2e2c4;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; }
+.cabinet {
+  max-width: 640px;
+  margin-inline: auto;
+  padding: 10px;
+  border: 1px solid #42392c;
+  background: #191714;
+}
+
+.scoreboard {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 22px;
+  padding: 2px 2px 10px;
+}
+
+.fighter label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+
+.fighter strong { color: var(--team); text-transform: uppercase; }
+.fighter span { color: #c3af94; font-size: 11px; }
+[data-color="blue"] { --team: #69c8ff; }
+[data-color="red"] { --team: #ff8272; }
+progress {
+  display: block;
+  appearance: none;
+  width: 100%;
+  height: 11px;
+  border: 1px solid #685a48;
+  border-radius: 0;
+  background: #302820;
+  accent-color: var(--team);
+}
+
+progress::-webkit-progress-bar { background: #302820; }
+progress::-webkit-progress-value { background: var(--team); }
+progress::-moz-progress-bar { background: var(--team); }
+
+.arena { position: relative; border: 1px solid #514330; background: #17161a; }
+canvas { display: block; width: 100%; max-height: 292px; object-fit: contain; image-rendering: pixelated; }
+.round {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: start center;
+  justify-items: center;
+  padding-top: 4%;
+  text-align: center;
+}
+
+.round p {
+  margin: 0 0 7px;
+  padding: 3px 9px;
+  background: #171411;
+  color: #ffda91;
+  font-size: clamp(12px, 3.6vw, 20px);
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.round p:empty { margin: 0; padding: 0; }
+
+button {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid #7a6549;
+  border-radius: 0;
+  background: #2d251c;
+  color: inherit;
+  font: 700 13px/1 ui-monospace, Menlo, monospace;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+
+button:focus-visible { outline: 2px solid #ffe1a3; outline-offset: 2px; }
+button:active, button[data-held] { background: #69482c; }
+button:disabled { opacity: .6; cursor: wait; }
+#play { min-height: 38px; padding-inline: 18px; color: #1e160d; background: #ffcb76; }
+.controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.directions { display: flex; gap: 5px; }
+.directions button { width: clamp(49px, 16vw, 65px); padding: 0; font-size: 20px; }
+.actions { display: flex; gap: 5px; }
+.actions button:last-child { border-color: #ca9b59; color: #ffca77; }
+.keys { margin: 7px 0 0; color: #c3af94; text-align: center; font-size: 11px; }
+
+@media (max-width: 350px) {
+  .cabinet { padding: 6px; }
+  .actions button { padding-inline: 8px; }
+}
+
+.fighter:last-child label { flex-direction: row-reverse; }
+.fighter:last-child progress { direction: rtl; }

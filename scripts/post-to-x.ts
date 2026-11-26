@@ -30,6 +30,15 @@ if (files.length === 0) {
   process.exit(1)
 }
 
+const posts = files
+  .map((file) => ({ file, data: matter(readFileSync(file, "utf8")).data }))
+  .filter(({ data }) => process.env.GITHUB_EVENT_NAME !== "push" || data.announceOnX !== false)
+
+if (posts.length === 0) {
+  console.log("No posts to announce.")
+  process.exit(0)
+}
+
 const dryRun = process.env.DRY_RUN === "1"
 
 function requireEnv(name: string): string {
@@ -116,8 +125,7 @@ async function postToX(text: string, creds: NonNullable<typeof credentials>): Pr
 
 let failed = false
 
-for (const file of files) {
-  const { data } = matter(readFileSync(file, "utf8"))
+for (const { file, data } of posts) {
   const title: unknown = data.title
   if (typeof title !== "string" || title.length === 0) {
     console.error(`✗ ${file} has no title in its frontmatter`)

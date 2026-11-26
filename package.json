@@ -7,8 +7,8 @@
     "node": "24.x"
   },
   "scripts": {
-    "dev": "next dev --turbopack",
-    "build": "next build",
+    "dev": "bash scripts/build-scrap-circuit.sh && next dev --turbopack",
+    "build": "bash scripts/build-scrap-circuit.sh && next build",
     "start": "wrangler dev",
     "lint": "eslint .",
     "typecheck": "tsc-ts --noEmit",

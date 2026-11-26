@@ -144,3 +144,7 @@ vite.config.ts.timestamp-*
 
 # music visualizer scratch recordings (not shipped)
 public/_raw/
+
+# Local Scrap Circuit build output
+/public/games/scrap-circuit/fight.wasm
+/public/games/scrap-circuit/wasm_exec.js

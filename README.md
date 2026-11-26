@@ -21,7 +21,7 @@ This needs `ffmpeg`. It cuts the song into a groove and writes `public/vinyl/ass
 
 ## Development
 
-Use Node.js 24 and pnpm 12.21.0. Run these commands from the repository root:
+Use Node.js 24, pnpm 12.21.0, and Go 1.24 or newer. The dev and build commands compile the Slop Bots WebAssembly module. Run these commands from the repository root:
 
 ```bash
 pnpm install --frozen-lockfile

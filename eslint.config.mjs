@@ -13,6 +13,7 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     "scripts/**",
     "public/vinyl/**",
+    "public/games/scrap-circuit/wasm_exec.js",
   ]),
 ])
 

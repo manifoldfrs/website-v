@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Rock 'Em Sock 'Em Slop Bots</title>
+    <link rel="stylesheet" href="./arena.css">
+    <script type="module" src="./arena.js"></script>
+  </head>
+  <body>
+    <main class="cabinet" aria-label="Rock 'Em Sock 'Em Slop Bots">
+      <header class="scoreboard">
+        <div class="fighter" data-color="blue">
+          <label for="player-health"><strong>Blue</strong><span>You</span></label>
+          <progress id="player-health" max="100" value="100">100</progress>
+        </div>
+        <div class="fighter" data-color="red">
+          <label for="cpu-health"><strong>Red</strong><span>CPU</span></label>
+          <progress id="cpu-health" max="100" value="100">100</progress>
+        </div>
+      </header>
+      <div class="arena">
+        <canvas tabindex="-1" width="256" height="144" role="img" aria-label="Robot boxing ring"></canvas>
+        <div class="round">
+          <p id="round-status" role="status"></p>
+          <button id="play" type="button">Fight</button>
+          <noscript>Enable JavaScript to play.</noscript>
+        </div>
+      </div>
+      <div class="controls" aria-label="Fight controls">
+        <div class="directions" role="group" aria-label="Move">
+          <button type="button" data-input="1" aria-label="Move left">←</button>
+          <button type="button" data-input="2" aria-label="Move right">→</button>
+        </div>
+        <div class="actions">
+          <button type="button" data-input="8">Guard</button>
+          <button type="button" data-input="4">Punch</button>
+        </div>
+      </div>
+      <p class="keys">A/D or ←/→ to move · J to punch · K to guard</p>
+    </main>
+  </body>
+</html>
