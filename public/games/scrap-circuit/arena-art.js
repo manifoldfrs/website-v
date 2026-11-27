@@ -12,6 +12,7 @@ const teleportArriving = 11
 const hoverCharging = 12
 const hoverFiring = 13
 const hoverLanding = 14
+const teleportRetreating = 15
 const playerEyeY = floor - 57
 
 function painter(ctx) {
@@ -239,7 +240,7 @@ export function drawRobot(ctx, { x, health, action, color, facesRight, laserRang
     drawLaser(rect, x + scaled(8) * direction, eyeY, end, hoveringLaser ? playerEyeY : eyeY, firing)
     drawLaser(rect, x + scaled(22) * direction, cannonY, end, hoveringLaser ? floor - 47 : cannonY, firing)
   }
-  if (action === teleportCharging || action === teleportArriving) {
+  if (action === teleportCharging || action === teleportRetreating || action === teleportArriving) {
     const rim = action === teleportArriving ? 27 : 21
     mark("#368a97", -rim, -65, 3, 65)
     mark("#368a97", rim - 3, -65, 3, 65)

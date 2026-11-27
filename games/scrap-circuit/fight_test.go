@@ -288,6 +288,58 @@ func TestOpponentTeleportsAfterWarningWithoutCrossingPlayer(t *testing.T) {
 	}
 }
 
+func TestOpponentTeleportsOutOfPunchRange(t *testing.T) {
+	match := newFight(0, 3)
+	player, cpu := &match.fighters[0], &match.fighters[1]
+	player.x, cpu.x = 100, 135
+	match.jumpWait, match.teleportWait = 100, 0
+	match.step(punch)
+	startX := cpu.x
+	for range teleportRetreatTicks {
+		match.step(0)
+		if cpu.action != teleportRetreating || cpu.x != startX {
+			t.Fatal("expected a brief flash before the opponent teleported away")
+		}
+	}
+	match.step(0)
+	if cpu.action != teleportArriving || cpu.x-player.x <= punchRange || match.teleportWait == 0 {
+		t.Fatal("expected the opponent to teleport out of punching range and use its cooldown")
+	}
+	for player.action == windup {
+		match.step(0)
+	}
+	if player.action != strike || cpu.health != 100 {
+		t.Fatal("the punch should miss after the opponent teleports away")
+	}
+}
+
+func TestOpponentOnlyTeleportsAwayWhenMoveIsAvailable(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		round int
+		x     float64
+		wait  int
+	}{
+		{name: "locked", round: 2, x: 100},
+		{name: "cornered", round: 3, x: rightWall - punchRange},
+		{name: "cooldown", round: 3, x: 100, wait: teleportCooldownTicks},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			match := newFight(0, tc.round)
+			player, cpu := &match.fighters[0], &match.fighters[1]
+			player.x, cpu.x = tc.x, tc.x+35
+			match.jumpWait, match.teleportWait = 100, tc.wait
+			match.step(punch)
+			for player.action == windup {
+				match.step(0)
+				if cpu.action == teleportRetreating || cpu.action == teleportArriving {
+					t.Fatal("opponent should stay within punching range")
+				}
+			}
+		})
+	}
+}
+
 func TestBossKeepsItsFormAndUnlocksAirborneLasersInRoundSix(t *testing.T) {
 	for _, round := range []int{4, 5, 6, 7, 25} {
 		match := newFight(0, round)

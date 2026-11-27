@@ -13,6 +13,7 @@ const (
 	jump
 	teleport
 	hoverLaser
+	teleportAway
 )
 
 const (
@@ -31,6 +32,7 @@ const (
 	hoverCharging
 	hoverFiring
 	hoverLanding
+	teleportRetreating
 )
 
 const (
@@ -68,10 +70,12 @@ const (
 	punchReachHeight      = 12
 	transformTicks        = 42
 	teleportChargeTicks   = 20
+	teleportRetreatTicks  = 5
 	teleportArrivalTicks  = 18
 	teleportCooldownTicks = 210
 	teleportMinRange      = 62
 	teleportGap           = 32
+	teleportRetreatGap    = 74
 	guardReadTicks        = 5
 	counterWindupBonus    = 4
 )
@@ -175,13 +179,18 @@ func (f *fight) step(input int) {
 		cpuWindup = max(7, cpuWindup-counterWindupBonus)
 	}
 	player.advance(input&(left|right|punch|guard), 1.45, 9)
+	retreating := cpu.action == teleportRetreating
 	cpu.advance(cpuInput, f.cpu.speed, cpuWindup)
 	gap := 24.0
 	if f.cpu.boss {
 		gap = 30
 	}
 	if cpu.action == teleportArriving && cpu.ticks == teleportArrivalTicks {
-		cpu.x = min(rightWall, player.x+teleportGap)
+		destinationGap := teleportGap
+		if retreating {
+			destinationGap = teleportRetreatGap
+		}
+		cpu.x = min(rightWall, player.x+float64(destinationGap))
 	}
 	if cpu.x-player.x < gap {
 		center := min(rightWall-gap/2, max(leftWall+gap/2, (player.x+cpu.x)/2))
@@ -242,7 +251,7 @@ func (p *fighter) advance(input int, speed float64, windupTicks int) {
 		case rocketJump:
 			p.action, p.ticks = recovering, jumpLandingTicks
 			return
-		case teleportCharging:
+		case teleportCharging, teleportRetreating:
 			p.action, p.ticks = teleportArriving, teleportArrivalTicks
 			return
 		}
@@ -271,6 +280,10 @@ func (p *fighter) advance(input int, speed float64, windupTicks int) {
 	}
 	if input&teleport != 0 {
 		p.action, p.ticks = teleportCharging, teleportChargeTicks
+		return
+	}
+	if input&teleportAway != 0 {
+		p.action, p.ticks = teleportRetreating, teleportRetreatTicks
 		return
 	}
 
@@ -317,6 +330,11 @@ func (f *fight) cpuInput(cpu, player *fighter) int {
 	if f.cpu.rocketBoots && f.jumpWait == 0 && distance <= punchRange && player.action == windup {
 		f.jumpWait = jumpCooldownTicks
 		return jump
+	}
+	if f.cpu.canTeleport && f.teleportWait == 0 && distance <= punchRange && player.x+punchRange < rightWall &&
+		player.action == windup && player.ticks > teleportRetreatTicks {
+		f.teleportWait = teleportCooldownTicks
+		return teleportAway
 	}
 	if f.cpuWait > 0 {
 		f.cpuWait--
