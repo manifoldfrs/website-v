@@ -11,17 +11,17 @@
     <main class="cabinet" aria-label="Rock 'Em Sock 'Em Slop Bots">
       <header class="scoreboard">
         <div class="fighter" data-color="blue">
-          <label for="player-health"><strong>Blue</strong><span>You</span></label>
-          <progress id="player-health" max="100" value="100">100</progress>
+          <label for="cpu-health"><strong>Blue</strong><span>CPU</span></label>
+          <progress id="cpu-health" max="100" value="100">100</progress>
         </div>
         <span id="round-number">Round 1</span>
         <div class="fighter" data-color="red">
-          <label for="cpu-health"><strong>Red</strong><span>CPU</span></label>
-          <progress id="cpu-health" max="100" value="100">100</progress>
+          <label for="player-health"><strong>Red</strong><span>You</span></label>
+          <progress id="player-health" max="100" value="100">100</progress>
         </div>
       </header>
       <div class="arena">
-        <canvas tabindex="-1" width="256" height="144" role="img" aria-label="Robot boxing ring"></canvas>
+        <canvas tabindex="-1" width="256" height="144" role="img" aria-label="Red is your robot on the right."></canvas>
         <div class="round">
           <p id="round-status" role="status"></p>
           <button id="play" type="button">Fight</button>

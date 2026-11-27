@@ -7,13 +7,11 @@ background.width = canvas.width
 background.height = canvas.height
 drawArena(background.getContext("2d"))
 
-const fighters = [...document.querySelectorAll(".fighter")].map((panel) => ({
-  panel,
-  name: panel.querySelector("strong"),
-  bar: panel.querySelector("progress"),
-}))
-const colorNames = { blue: "Blue", red: "Red" }
-const visitKey = "slop-bots-last-player-color"
+const fighters = ["player-health", "cpu-health"].map((id) => {
+  const bar = document.getElementById(id)
+  const panel = bar.closest(".fighter")
+  return { color: panel.dataset.color, name: panel.querySelector("strong"), bar }
+})
 const playerWins = 1
 const cpuWins = 2
 const moveLeft = 1
@@ -43,30 +41,24 @@ let elapsed = 0
 let frameRequest = 0
 let visit = 0
 let round = 1
-let startingColor
-
-function playerOnRight() {
-  return (startingColor === "red") !== (round % 2 === 0)
-}
 
 function render() {
   ctx.drawImage(background, 0, 0)
   const roundLabel = frame[5] === transforming ? "Transforming" : `Round ${round}${round >= 4 ? " · Boss" : ""}`
   if (roundNumber.textContent !== roundLabel) roundNumber.textContent = roundLabel
-  const mirrored = playerOnRight()
-  const playerX = mirrored ? canvas.width - frame[0] : frame[0]
-  fighters.forEach(({ panel, bar }, i) => {
+  const playerX = canvas.width - frame[0]
+  fighters.forEach(({ color, bar }, i) => {
     const offset = i * 3
     const [x, health, action] = frame.subarray(offset, offset + 3)
     const maxHealth = i === 1 ? frame[11] : 100
     if (bar.max !== maxHealth) bar.max = maxHealth
     if (bar.value !== health) bar.value = health
     drawRobot(ctx, {
-      x: mirrored ? canvas.width - x : x,
+      x: canvas.width - x,
       health,
       action,
-      color: panel.dataset.color,
-      facesRight: mirrored ? i === 1 : i === 0,
+      color,
+      facesRight: i === 1,
       laserRange: frame[7],
       targetX: playerX,
       lift: i === 1 ? frame[8] : 0,
@@ -83,33 +75,6 @@ function releaseInputs() {
   buttons.forEach((button) => delete button.dataset.held)
 }
 
-function nextColor() {
-  for (const storageName of ["localStorage", "sessionStorage"]) {
-    try {
-      const storage = window[storageName]
-      const color = storage.getItem(visitKey) === "blue" ? "red" : "blue"
-      storage.setItem(visitKey, color)
-      return color
-    } catch {
-      // A browser can block one storage API and still allow the other.
-    }
-  }
-  if (startingColor) return startingColor === "blue" ? "red" : "blue"
-  return Math.random() < 0.5 ? "blue" : "red"
-}
-
-function showRound() {
-  const mirrored = playerOnRight()
-  const [left, right] = mirrored ? [fighters[1], fighters[0]] : fighters
-  for (const [fighter, color] of [[left, "blue"], [right, "red"]]) {
-    fighter.panel.dataset.color = color
-    fighter.name.textContent = colorNames[color]
-  }
-  roundNumber.before(left.panel)
-  roundNumber.after(right.panel)
-  canvas.setAttribute("aria-label", mirrored ? "Red is your robot on the right." : "Blue is your robot on the left.")
-}
-
 function prepareVisit() {
   visit++
   running = false
@@ -117,8 +82,6 @@ function prepareVisit() {
   releaseInputs()
   frame.set(readyFrame)
   round = 1
-  startingColor = nextColor()
-  showRound()
   status.textContent = ""
   play.textContent = "Fight"
   overlay.hidden = false
@@ -135,11 +98,9 @@ function tick(time) {
     tapped = 0
     for (const key of pressedKeys) input |= keys.get(key)
     for (const button of pointers.values()) input |= Number(button.dataset.input)
-    if (playerOnRight()) {
-      const movingLeft = input & moveLeft
-      const movingRight = input & moveRight
-      input = (input & ~(moveLeft | moveRight)) | (movingLeft << 1) | (movingRight >> 1)
-    }
+    const movingLeft = input & moveLeft
+    const movingRight = input & moveRight
+    input = (input & ~(moveLeft | moveRight)) | (movingLeft << 1) | (movingRight >> 1)
     window.stepScrapCircuit(input, frame)
     elapsed -= timestep
   }
@@ -193,7 +154,6 @@ play.addEventListener("click", async () => {
   } else if (frame[6] === cpuWins) {
     round = 1
   }
-  showRound()
   releaseInputs()
   window.resetScrapCircuit(Math.floor(Math.random() * 0x7fffffff), frame, round)
   status.textContent = ""
