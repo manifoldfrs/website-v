@@ -250,17 +250,33 @@ func TestBossTransformationRunsBeforeCombat(t *testing.T) {
 	}
 }
 
-func TestBossTeleportsAfterWarningWithoutCrossingPlayer(t *testing.T) {
-	match := newFight(0, 4)
-	finishTransformation(&match)
+func TestOpponentUnlocksTeleportInRoundThree(t *testing.T) {
+	for round := 1; round <= 3; round++ {
+		match := newFight(0, round)
+		teleported := false
+		for range 70 {
+			match.step(0)
+			if match.fighters[1].action == teleportArriving {
+				teleported = true
+				break
+			}
+		}
+		if teleported != (round == 3) {
+			t.Fatalf("round %d: teleported = %t", round, teleported)
+		}
+	}
+}
+
+func TestOpponentTeleportsAfterWarningWithoutCrossingPlayer(t *testing.T) {
+	match := newFight(0, 3)
 	player, cpu := &match.fighters[0], &match.fighters[1]
 	player.x, cpu.x = 90, 185
-	match.laserWait, match.teleportWait = 100, 0
+	match.teleportWait = 0
 	match.step(0)
 	for range teleportChargeTicks - 1 {
 		match.step(left)
 		if cpu.action != teleportCharging || cpu.x != 185 {
-			t.Fatal("boss teleported before the warning ended")
+			t.Fatal("opponent teleported before the warning ended")
 		}
 	}
 	match.step(left)

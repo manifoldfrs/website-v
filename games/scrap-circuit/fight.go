@@ -41,13 +41,14 @@ const (
 )
 
 const (
-	leftWall   = 30
-	rightWall  = 226
-	punchRange = 38
-	laserRange = 108
-	bossRound  = 4
-	hoverRound = 6
-	rapidRound = 8
+	leftWall      = 30
+	rightWall     = 226
+	punchRange    = 38
+	laserRange    = 108
+	teleportRound = 3
+	bossRound     = 4
+	hoverRound    = 6
+	rapidRound    = 8
 )
 
 const (
@@ -92,6 +93,7 @@ type cpuDifficulty struct {
 	hoverLasers bool
 	rapidAttack bool
 	rocketBoots bool
+	canTeleport bool
 	maxHealth   int
 	boss        bool
 }
@@ -110,7 +112,7 @@ type fight struct {
 
 func newFight(seed int64, round int) fight {
 	wins := float64(max(1, round) - 1)
-	pressure := wins / (wins + 6)
+	pressure := wins / (wins + 3)
 	match := fight{
 		fighters: [2]fighter{
 			{x: 70, health: 100},
@@ -123,9 +125,13 @@ func newFight(seed int64, round int) fight {
 			guardChance: 22 + int(50*pressure),
 			damage:      14 + int(11*pressure),
 			rocketBoots: round >= 3,
+			canTeleport: round >= teleportRound,
 			maxHealth:   100,
 		},
 		random: rand.New(rand.NewSource(seed)),
+	}
+	if match.cpu.canTeleport {
+		match.teleportWait = 24
 	}
 	if round < bossRound {
 		return match
@@ -328,7 +334,7 @@ func (f *fight) cpuInput(cpu, player *fighter) int {
 		}
 		return laser
 	}
-	if f.cpu.boss && distance >= teleportMinRange && f.teleportWait == 0 {
+	if f.cpu.canTeleport && distance >= teleportMinRange && f.teleportWait == 0 {
 		f.teleportWait = teleportCooldownTicks
 		return teleport
 	}
